@@ -21,6 +21,7 @@ precalculated values in the required input form may also be used.
 
 import copy
 import logging
+import warnings
 
 import iris
 import iris.cube
@@ -34,16 +35,14 @@ def cape_ratio(SBCAPE, MUCAPE, MUCIN, MUCIN_thresh=-75.0):
     ----------
     SBCAPE: Cube
         Surface-based convective available potential energy as calculated by the
-        model.
-        If using the UM please use STASH ``m01s20i114``
+        model. If using the UM please use STASH ``m01s20i114``
     MUCAPE: Cube
         Most-unstable convective available potential energy as calculated by the
-        model.
-        If using the UM please use STASH ``m01s20i112``
+        model. If using the UM please use STASH ``m01s20i112``
     MUCIN: Cube
         Most-unstable convective inhibition associated with the most-unstable
-        ascent as calculated by the model.
-        If using the UM please use STASH ``m01s20i113``
+        ascent as calculated by the model. If using the UM please use STASH
+        ``m01s20i113``
     MUCIN_thresh: float, optional, default is -75. J/kg.
         Threshold to filter the MUCAPE by values are realistically realisable.
 
@@ -53,13 +52,14 @@ def cape_ratio(SBCAPE, MUCAPE, MUCIN, MUCIN_thresh=-75.0):
 
     Notes
     -----
-    This diagnostic is based on Clark et al. (2012) [Clarketal2012]_. It is based around the idea
-    that for elevated convection the convective instability is not based at the
-    surface. This utilises two flavours of CAPE: the surface-based CAPE (SBCAPE)
-    and the most-unstable CAPE (MUCAPE). The MUCAPE is filtered by the MUCIN
-    associated with that parcel's ascent to ensure that any CAPE can at least
-    theoretically be released. The default value is set at -75 J/kg but it can
-    be changes depending on location and users requirements.
+    This diagnostic is based on Clark et al. (2012) [Clarketal2012]_. It is
+    based around the idea that for elevated convection the convective
+    instability is not based at the surface. This utilises two flavours of CAPE:
+    the surface-based CAPE (SBCAPE) and the most-unstable CAPE (MUCAPE). The
+    MUCAPE is filtered by the MUCIN associated with that parcel's ascent to
+    ensure that any CAPE can at least theoretically be released. The default
+    value is set at -75 J/kg but it can be changes depending on location and
+    users requirements.
 
     .. math:: 1 - (\frac{SBCAPE}{MUCAPE})
 
@@ -79,29 +79,28 @@ def cape_ratio(SBCAPE, MUCAPE, MUCIN, MUCIN_thresh=-75.0):
 
     Expected applicability ranges: Convective-scale models will be noisier than
     parametrized models as they are more responsive to the convection, and thus
-    it may be more sensible to view as a larger spatial average rather than
-    on the native resolution.
+    it may be more sensible to view as a larger spatial average rather than on
+    the native resolution.
 
     Interpretation notes: UM stash for CAPE and CIN are calculated at the end of
-    the timestep. Therefore this diagnostic is applicable after precipitation has
-    occurred, not before as is the usual interpretation of CAPE related diagnostics.
+    the timestep. Therefore this diagnostic is applicable after precipitation
+    has occurred, not before as is the usual interpretation of CAPE related
+    diagnostics.
 
-    You might encounter ``RuntimeWarning: divide by zero encountered in divide``
-    or ``RuntimeWarning: invalid value encountered in divide`` this is expected
-    for when CAPE is zero. The data will be replaced by NaNs.
+    You might encounter division by zero when CAPE is zero. The data will be
+    replaced by NaNs.
 
     References
     ----------
-    .. [Clarketal2012] Clark, A. J., Kain J. S., Marsh P. T., Correia J., Xue M., and Kong
-       F., (2012) "Forecasting tornado pathlengths using a three-dimensional
-       object identification algorithm applied to convection-allowing
-       forecasts." Weather and Forecasting, vol. 27, 1090–1113, doi:
-       10.1175/WAF-D-11-00147.1
-    .. [FlackCAPE2023] Flack, D.L.A., Lehnert, M., Lean, H.W., and Willington, S. (2023)
-       "Characteristics of Diagnostics for Identifying Elevated
+    .. [Clarketal2012] Clark, A. J., Kain J. S., Marsh P. T., Correia J., Xue
+       M., and Kong F., (2012) "Forecasting tornado pathlengths using a
+       three-dimensional object identification algorithm applied to
+       convection-allowing forecasts." Weather and Forecasting, vol. 27,
+       1090–1113, doi: 10.1175/WAF-D-11-00147.1
+    .. [FlackCAPE2023] Flack, D.L.A., Lehnert, M., Lean, H.W., and Willington,
+       S. (2023) "Characteristics of Diagnostics for Identifying Elevated
        Convection over the British Isles in a Convection-Allowing Model."
-       Weather and Forecasting, vol. 30, 1079-1094, doi:
-       10.1175/WAF-D-22-0219.1
+       Weather and Forecasting, vol. 30, 1079-1094, doi: 10.1175/WAF-D-22-0219.1
 
     Examples
     --------
@@ -126,10 +125,13 @@ def cape_ratio(SBCAPE, MUCAPE, MUCIN, MUCIN_thresh=-75.0):
     MUCAPE_data = copy.deepcopy(MUCAPE.data)
     # Filter MUCAPE by MUCIN to all for possible (realistic) MUCAPE.
     MUCAPE_data[MUCIN.data <= MUCIN_thresh] = 0.0
-    # Now calculate the main diagnostic
-    EC_Flagb = 1 - (SBCAPE_data / MUCAPE_data)
+    with warnings.catch_warnings():
+        # Ignore divide by zero warnings.
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        # Now calculate the main diagnostic.
+        EC_Flagb = 1 - (SBCAPE_data / MUCAPE_data)
     # Filter to reduce NaN values and -inf values for plotting ease.
-    # There are multiple types of NaN values so need to convert them all to same type.
+    # Multiple types of NaN values converted to same type.
     EC_Flagb[np.isnan(EC_Flagb)] = np.nan
     EC_Flagb[np.isinf(EC_Flagb)] = np.nan
     # Take the coordinates from an existing cube and replace the data.
