@@ -28,13 +28,13 @@ if os.getenv("CSET_ENV_USE_LOCAL_CSET") == "True":
             # am using subprocess with shell=True here so variables like $HOME
             # in the path are resolved.
             subprocess.run(
-                f"cp -r {local_cset_path} {tempdir}",
+                f"cp -r {local_cset_path}/. {tempdir}",
                 check=True,
                 shell=True,
             )
             # Build and install into python environment.
             subprocess.run(
-                ("pip", "install", "-v", "--progress-bar", "off", f"{tempdir}/CSET"),
+                ("pip", "install", "-v", "--progress-bar", "off", f"{tempdir}"),
                 check=True,
             )
 
