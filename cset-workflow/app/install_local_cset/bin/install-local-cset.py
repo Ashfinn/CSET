@@ -34,7 +34,7 @@ if os.getenv("CSET_ENV_USE_LOCAL_CSET") == "True":
             )
             # Build and install into python environment.
             subprocess.run(
-                ("pip", "install", "-v", "--progress-bar", "off", f"{tempdir}"),
+                ("pip", "install", "-v", "--progress-bar", "off", "--no-deps", tempdir),
                 check=True,
             )
 
