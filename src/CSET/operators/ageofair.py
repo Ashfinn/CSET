@@ -189,7 +189,8 @@ def compute_ageofair(
     Compute back trajectories for a given forecast.
 
     This allows us to determine when air entered through the boundaries. This will run on all available
-    lead-times, and thus return an age of air cube of shape ntime, nlat, nlon.
+    lead-times, and thus return an age of air cube of shape ntime, nlat, nlon. It supports multiprocesing,
+    by iterating over longitude, or if set as None, will run on a single core, which is easier for debugging.
 
     Arguments
     ----------
@@ -233,25 +234,15 @@ def compute_ageofair(
         An iris cube of the age of air data, with 3 dimensions (time, latitude, longitude).
 
     """
-    # multicore = None
+    # If not None, then use multiple cores to run age of air diagnostic.
+    #    multicore = None
+
+    # Check that all cubes are of same size (will catch different dimension orders too).
+    if not XWIND.shape == YWIND.shape == WWIND.shape == GEOPOT.shape:
+        raise ValueError("Cubes are not the same shape")
 
     pass
 
-
-#    # Filter cubelist and pull out required cubes (sometimes multiple with same name, need to check)
-#    for cube in cubelist:
-#        if cube.standard_name == "x_wind":
-#            x_wind = cube
-#        elif cube.standard_name == "y_wind":
-#            y_wind = cube
-#        elif cube.standard_name == "upward_air_velocity":
-#            z_wind = cube
-#        elif cube.standard_name == "geopotential_height":
-#            geopot = cube
-
-#    # Check that all cubes are of same dimension (some might differ slightly, extra y point often)
-#    if not x_wind.shape == y_wind.shape == z_wind.shape == geopot.shape:
-#        quit("Cubes not same dimlen! Quitting...")
 
 #    # Get time units and assign for later
 #    if str(x_wind.coord("time").units) == "hours since 1970-01-01 00:00:00":
