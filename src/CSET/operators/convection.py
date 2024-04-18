@@ -227,7 +227,6 @@ def inflow_layer_properties(EIB, BLheight, Orography):
     >>> plt.colorbar()
     >>> plt.clim(0,1)
     >>> plt.show()
-
     """
     # Setup new array for output of the diagnostic.
     EC_Flagd = np.zeros(EIB.shape)

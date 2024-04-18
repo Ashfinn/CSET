@@ -16,9 +16,9 @@ Try the following:
 
 .. code-block:: bash
 
-    cset cookbook -o recipes
+    cset cookbook -o recipes mean_surface_air_temperature_spatial_plot.yaml
 
-This will write out a recipes folder containing recipe ``.yaml`` files to your
+This will write out a recipes folder containing recipe ``.yaml`` file to your
 current directory. We will use the
 ``mean_surface_air_temperature_spatial_plot.yaml`` recipe.
 
@@ -40,7 +40,7 @@ output should be a directory, but it will be created if it does not exist.
 This will run the recipe and leave its output in the specified output directory.
 
 The most interesting output will be the plot, which you can look at with
-``xdg-open output/plot.svg``.
+``xdg-open output/plot.png``.
 
 You've now successfully run CSET with a pre-existing recipe. In the next
 tutorial we will see what is going on inside.

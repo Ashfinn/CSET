@@ -1,4 +1,4 @@
-steps:
+parallel:
   - operator: read.read_cubes
     filename_pattern: "exeter_em*.nc"
     constraint:
@@ -6,4 +6,4 @@ steps:
       stash: m01s03i236
 
   - operator: plot.postage_stamp_contour_plot
-    filename: plot.svg
+    filename: plot.png

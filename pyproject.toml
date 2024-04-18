@@ -35,7 +35,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
-filterwarnings = ['ignore::DeprecationWarning:pytest']
+filterwarnings = [
+    # https://github.com/dateutil/dateutil/issues/1314
+    "ignore::DeprecationWarning:dateutil",
+    "ignore:numpy.ndarray size changed:RuntimeWarning",
+]
 minversion = "7"
 pythonpath = ["src"]
 testpaths = ["tests"]
@@ -113,8 +117,8 @@ skip = "build,*.css,*.ipynb,*.js,*.html,*.svg,*.xml,.git"
 
 [tool.ruff]
 line-length = 88
-show-source = true
 src = ["src", "test"]
+output-format = "full"
 
 [tool.ruff.lint]
 extend-select = ["B", "D", "I"]

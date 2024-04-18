@@ -1,8 +1,8 @@
-name: Plot average air temperature
+title: Plot average air temperature
 description: |
   Plots the mean 1.5m air temperature over an area.
 
-steps:
+parallel:
   - operator: read.read_cubes
     constraint:
       operator: constraints.generate_stash_constraint

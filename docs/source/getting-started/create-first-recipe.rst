@@ -74,9 +74,12 @@ provided they are all indented with at least two spaces.
 Recipe Steps
 ------------
 
-Just as in baking you would follow a recipe step-by-step, so does CSET. The
-steps of the recipe are all under the ``steps`` key. Each block prefixed with a
-``-`` (which makes a list in YAML) is a step, and they are run in order from top to bottom.
+When baking you follow a recipe step-by-step, CSET does the same with its
+recipes. The steps of the recipe are contained within one of two keys. The
+``parallel`` key for independent tasks that process the raw data, and the
+``collate`` key for sequential tasks that bring together the processed data into
+the final output. Each block prefixed with a ``-`` (which makes a list in YAML)
+is an individual step, and they are run in order from top to bottom.
 
 Each step has an ``operator`` key, which specifies which operator to use. A
 `complete list of operators is in the documentation`_, but for this tutorial we
@@ -90,13 +93,12 @@ to the input data as its implicit input.
 
 .. code-block:: yaml
 
-    steps:
+    parallel:
       - operator: read.read_cubes
 
-Once we have read the data, we need to filter them down to the data we require for our computations.
-``filter.filter_cubes`` is the operator for that. It also ensures that the
-CubeList returned by ``read.read_cubes`` is turned into a
-Cube.
+Once we have read the data, we need to filter them down to the data we require
+for our computations. ``filter.filter_cubes`` is the operator for that. It also
+ensures that the CubeList returned by ``read.read_cubes`` is turned into a Cube.
 
 .. code-block:: yaml
 
@@ -113,18 +115,16 @@ Cube.
 
 Unlike the ``read.read_cubes`` operator, we have many key-value pairs in this
 step. The other keys in the step are the named arguments that operator takes.
-Each operator implicitly takes its first argument from the previous step, but this
-can be overridden by explicitly providing it.
+Each operator implicitly takes its first argument from the previous step, but
+this can be overridden by explicitly providing it.
 
-Note that arguments of operators can themselves be
-operators. This allows nesting operators to use their output as arguments to
-other operators.
+Note that arguments of operators can themselves be operators. This allows
+nesting operators to use their output as arguments to other operators.
 
-
-Next we reduce the dimensionality of the data ahead of plotting. In this
-case we chose the mean of the time coordinate. The ``collapse.collapse`` operator
-allows us to do this, and takes as parameters the coordinate to collapse, and
-the method by which it is done.
+Next we reduce the dimensionality of the data ahead of plotting. In this case we
+chose the mean of the time coordinate. The ``collapse.collapse`` operator allows
+us to do this, and takes as parameters the coordinate to collapse, and the
+method by which it is done.
 
 .. code-block:: yaml
 
@@ -157,7 +157,7 @@ After following this far your recipe should look like this:
       Extracts and plots the 1.5m air temperature from a file. The temperature
       is averaged across the time coordinate.
 
-    steps:
+    parallel:
       - operator: read.read_cubes
 
       - operator: filters.filter_cubes

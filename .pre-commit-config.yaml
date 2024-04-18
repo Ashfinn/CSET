@@ -4,13 +4,6 @@ ci:
   autoupdate_schedule: monthly
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: 1d42195ebc67a509991eaf68c2353e0181003a95  # frozen: v0.1.14
-    hooks:
-      - id: ruff
-        args: [ --fix, --show-fixes, --exit-non-zero-on-fix ]
-
   - repo: https://github.com/codespell-project/codespell
     rev: 6e41aba91fb32e9feb741a6258eefeb9c6e4a482  # frozen: v2.2.6
     hooks:
@@ -19,19 +12,21 @@ repos:
       additional_dependencies:
         - tomli
 
-  - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: ababb58801592720e6291c8718da55caabbe6670  # frozen: 24.1.1
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: e76e45000a5aa92cd2ec4d3fb1485f2f9fea5097  # frozen: v0.3.7
     hooks:
-      - id: black
+      - id: ruff
+        args: [ --fix, --show-fixes, --exit-non-zero-on-fix ]
+      - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: c4a0b883114b00d8d76b479c820ce7950211c99b  # frozen: v4.5.0
+    rev: 2c9f875913ee60ca25ce70243dc24d5b6415598c  # frozen: v4.6.0
     hooks:
       - id: check-added-large-files
         args: ['--maxkb=10240']
       - id: check-case-conflict
       - id: check-merge-conflict
-      - id: check-json
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer

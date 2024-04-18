@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Met Office and contributors.
+# Copyright 2022-2024 Met Office and contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,24 +14,31 @@
 
 """Common functionality used across CSET."""
 
-import copy
 import io
 import json
 import logging
 import re
+import warnings
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, List, Union
+from typing import Union
 
 import ruamel.yaml
 
 
-def parse_recipe(recipe_yaml: Union[Path, str]):
+class ArgumentError(ValueError):
+    """Provided arguments are not understood."""
+
+
+def parse_recipe(recipe_yaml: Union[Path, str], variables: dict = None):
     """Parse a recipe into a python dictionary.
 
     Parameters
     ----------
     recipe_yaml: Path | str
         Path to recipe file, or the recipe YAML directly.
+    variables: dict
+        Dictionary of recipe variables. If None templating is not attempted.
 
     Returns
     -------
@@ -44,18 +51,21 @@ def parse_recipe(recipe_yaml: Union[Path, str]):
         If the recipe is invalid. E.g. invalid YAML, missing any steps, etc.
     TypeError
         If recipe_yaml isn't a Path or string.
+    KeyError
+        If needed recipe variables are not supplied.
 
     Examples
     --------
-    >>> CSET._recipe_parsing.parse_recipe(Path("myrecipe.yaml"))
-    {'steps': [{'operator': 'misc.noop'}]}
+    >>> CSET._common.parse_recipe(Path("myrecipe.yaml"))
+    {'parallel': [{'operator': 'misc.noop'}]}
     """
-    # Check the type provided explicitly.
+    # Ensure recipe_yaml is something the YAML parser can read.
     if isinstance(recipe_yaml, str):
         recipe_yaml = io.StringIO(recipe_yaml)
     elif not isinstance(recipe_yaml, Path):
         raise TypeError("recipe_yaml must be a str or Path.")
 
+    # Parse the recipe YAML.
     with ruamel.yaml.YAML(typ="safe", pure=True) as yaml:
         try:
             recipe = yaml.load(recipe_yaml)
@@ -64,23 +74,55 @@ def parse_recipe(recipe_yaml: Union[Path, str]):
         except ruamel.yaml.error.YAMLStreamError as err:
             raise TypeError("Must provide a file object (with a read method)") from err
 
-    # Checking that the recipe actually has some steps, and providing helpful
-    # error messages otherwise.
     logging.debug(recipe)
-    try:
-        if len(recipe["steps"]) < 1:
-            raise ValueError("Recipe must have at least 1 step.")
-    except KeyError as err:
-        raise ValueError("Invalid Recipe.") from err
-    except TypeError as err:
-        if recipe is None:
-            raise ValueError("Recipe must have at least 1 step.") from err
-        if not isinstance(recipe, dict):
-            raise ValueError("Recipe must either be YAML, or a Path.") from err
-        # This should never be reached; it's a bug if it is.
-        raise err  # pragma: no cover
+    check_recipe_has_steps(recipe)
+
+    if variables is not None:
+        logging.debug("Recipe variables: %s", variables)
+        recipe = template_variables(recipe, variables)
 
     return recipe
+
+
+def check_recipe_has_steps(recipe: dict):
+    """Check a recipe has the minimum required steps.
+
+    Checking that the recipe actually has some steps, and providing helpful
+    error messages otherwise. We must have at least a parallel step, as that
+    reads the raw data.
+
+    Parameters
+    ----------
+    recipe: dict
+        The recipe as a python dictionary.
+
+    Raises
+    ------
+    ValueError
+        If the recipe is invalid. E.g. invalid YAML, missing any steps, etc.
+    TypeError
+        If recipe isn't a dict.
+    KeyError
+        If needed recipe variables are not supplied.
+    """
+    parallel_steps_key = "parallel"
+    if not isinstance(recipe, dict):
+        raise TypeError("Recipe must contain a mapping.")
+    if "parallel" not in recipe:
+        if "steps" in recipe:
+            warnings.warn(
+                "'steps' recipe key is deprecated, use 'parallel' instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            parallel_steps_key = "steps"
+        else:
+            raise ValueError("Recipe must contain a 'parallel' key.")
+    try:
+        if len(recipe[parallel_steps_key]) < 1:
+            raise ValueError("Recipe must have at least 1 parallel step.")
+    except TypeError as err:
+        raise ValueError("'parallel' key must contain a sequence of steps.") from err
 
 
 def slugify(s: str) -> str:
@@ -94,11 +136,17 @@ def slugify(s: str) -> str:
 
 def get_recipe_metadata() -> dict:
     """Get the metadata of the running recipe."""
-    with open("meta.json", "rt", encoding="UTF-8") as fp:
-        return json.load(fp)
+    try:
+        with open("meta.json", "rt", encoding="UTF-8") as fp:
+            return json.load(fp)
+    except FileNotFoundError:
+        meta = {}
+        with open("meta.json", "wt", encoding="UTF-8") as fp:
+            json.dump(meta, fp)
+        return {}
 
 
-def parse_variable_options(arguments: List[str]) -> dict:
+def parse_variable_options(arguments: list[str]) -> dict:
     """Parse a list of arguments into a dictionary of variables.
 
     The variable name arguments start with two hyphen-minus (`--`), consisting
@@ -107,7 +155,7 @@ def parse_variable_options(arguments: List[str]) -> dict:
 
     Parameters
     ----------
-    arguments: List[str]
+    arguments: list[str]
         List of arguments, e.g: `["--LEVEL", "2", "--STASH=m01s01i001"]`
 
     Returns
@@ -130,10 +178,10 @@ def parse_variable_options(arguments: List[str]) -> dict:
                 key = arguments[i].strip("-")
                 value = arguments[i + 1]
             except IndexError as err:
-                raise ValueError(f"No value for variable {arguments[i]}") from err
+                raise ArgumentError(f"No value for variable {arguments[i]}") from err
             i += 1
         else:
-            raise ValueError(f"Unknown argument: {arguments[i]}")
+            raise ArgumentError(f"Unknown argument: {arguments[i]}")
         try:
             recipe_variables[key.strip("-")] = json.loads(value)
         except json.JSONDecodeError:
@@ -142,20 +190,13 @@ def parse_variable_options(arguments: List[str]) -> dict:
     return recipe_variables
 
 
-def is_variable(var: Any) -> bool:
-    """Check if recipe value is a variable."""
-    if isinstance(var, str) and re.match(r"^\$[A-Z_]+$", var):
-        return True
-    return False
-
-
 def template_variables(recipe: Union[dict, list], variables: dict) -> dict:
     """Insert variables into recipe.
 
     Parameters
     ----------
     recipe: dict | list
-        The recipe as a python dictionary.
+        The recipe as a python dictionary. It is updated in-place.
     variables: dict
         Dictionary of variables for the recipe.
 
@@ -169,17 +210,127 @@ def template_variables(recipe: Union[dict, list], variables: dict) -> dict:
     KeyError
         If needed recipe variables are not supplied.
     """
-    recipe = copy.deepcopy(recipe)
     if isinstance(recipe, dict):
         index = recipe.keys()
     elif isinstance(recipe, list):
+        # We have to handle lists for when we have one inside a recipe.
         index = range(len(recipe))
     else:
-        raise TypeError("recipe must be a dict or list.")
+        raise TypeError("recipe must be a dict or list.", recipe)
+
     for i in index:
         if isinstance(recipe[i], (dict, list)):
             recipe[i] = template_variables(recipe[i], variables)
-        if is_variable(recipe[i]):
-            logging.debug("Templating %s", recipe[i])
-            recipe[i] = variables[recipe[i].removeprefix("$")]
+        elif isinstance(recipe[i], str):
+            recipe[i] = replace_template_variable(recipe[i], variables)
     return recipe
+
+
+def replace_template_variable(s: str, variables):
+    """Fill all variable placeholders in the string."""
+    for var_name, var_value in variables.items():
+        placeholder = f"${var_name}"
+        # If the value is just the placeholder we directly overwrite it
+        # to keep the value type.
+        if s == placeholder:
+            s = var_value
+            break
+        else:
+            s = s.replace(placeholder, str(var_value))
+    if isinstance(s, str) and re.match(r"^.*\$[A-Z_].*", s):
+        raise KeyError("Variable without a value.", s)
+    return s
+
+
+################################################################################
+# Templating code taken from the simple_template package under the 0BSD licence.
+# Original at https://github.com/Fraetor/simple_template
+################################################################################
+
+
+class TemplateError(KeyError):
+    """Rendering a template failed due a placeholder without a value."""
+
+
+def render(template: str, /, **variables) -> str:
+    """Render the template with the provided variables.
+
+    The template should contain placeholders that will be replaced. These
+    placeholders consist of the placeholder name within double curly braces. The
+    name of the placeholder should be a valid python identifier. Whitespace
+    between the braces and the name is ignored. E.g.: `{{ placeholder_name }}`
+
+    An exception will be raised if there are placeholders without corresponding
+    values. It is acceptable to provide unused values; they will be ignored.
+
+    Parameters
+    ----------
+    template: str
+        Template to fill with variables.
+
+    **variables: Any
+        Keyword arguments for the placeholder values. The argument name should
+        be the same as the placeholder's name. You can unpack a dictionary of
+        value with `render(template, **my_dict)`.
+
+    Returns
+    -------
+    rendered_template: str
+        Filled template.
+
+    Raises
+    ------
+    TemplateError
+        Value not given for a placeholder in the template.
+    TypeError
+        If the template is not a string, or a variable cannot be casted to a
+        string.
+
+    Examples
+    --------
+    >>> template = "<p>Hello {{myplaceholder}}!</p>"
+    >>> simple_template.render(template, myplaceholder="World")
+    "<p>Hello World!</p>"
+    """
+
+    def isidentifier(s: str):
+        return s.isidentifier()
+
+    def extract_placeholders():
+        matches = re.finditer(r"{{\s*([^}]+)\s*}}", template)
+        unique_names = {match.group(1) for match in matches}
+        return filter(isidentifier, unique_names)
+
+    def substitute_placeholder(name):
+        try:
+            value = str(variables[name])
+        except KeyError as err:
+            raise TemplateError("Placeholder missing value", name) from err
+        pattern = r"{{\s*%s\s*}}" % re.escape(name)
+        return re.sub(pattern, value, template)
+
+    for name in extract_placeholders():
+        template = substitute_placeholder(name)
+    return template
+
+
+def render_file(template_path: str, /, **variables) -> str:
+    """Render a template directly from a file.
+
+    Otherwise the same as `simple_template.render()`.
+
+    Examples
+    --------
+    >>> simple_template.render_file("/path/to/template.html", myplaceholder="World")
+    "<p>Hello World!</p>"
+    """
+    with open(template_path, "rt", encoding="UTF-8") as fp:
+        template = fp.read()
+    return render(template, **variables)
+
+
+def iter_maybe(thing) -> Iterable:
+    """Ensure thing is Iterable. Strings count as atoms."""
+    if isinstance(thing, Iterable) and not isinstance(thing, str):
+        return thing
+    return (thing,)

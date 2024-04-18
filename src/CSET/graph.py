@@ -16,12 +16,13 @@
 
 import logging
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Union
 from uuid import uuid4
 
-import pygraphviz as pgz
+import pygraphviz
 
 from CSET._common import parse_recipe
 
@@ -60,13 +61,13 @@ def save_graph(
 
     def step_parser(step: dict, prev_node: str) -> str:
         """Parse recipe to add nodes to graph and link them with edges."""
-        logging.debug(f"Executing step: {step}")
+        logging.debug("Executing step: %s", step)
         node = str(uuid4())
         graph.add_node(node, label=step["operator"])
         kwargs = {}
         for key in step.keys():
             if isinstance(step[key], dict) and "operator" in step[key]:
-                logging.debug(f"Recursing into argument: {key}")
+                logging.debug("Recursing into argument: %s", key)
                 sub_node = step_parser(step[key], prev_node)
                 graph.add_edge(sub_node, node)
             elif key != "operator":
@@ -79,12 +80,13 @@ def save_graph(
             )
         return node
 
-    graph = pgz.AGraph(directed=True)
+    graph = pygraphviz.AGraph(directed=True)
 
     prev_node = "START"
     graph.add_node(prev_node)
     try:
-        for step in recipe["steps"]:
+        # TODO: Expand to cover collate too.
+        for step in recipe["parallel"]:
             prev_node = step_parser(step, prev_node)
     except KeyError as err:
         raise ValueError("Invalid recipe") from err
@@ -92,9 +94,16 @@ def save_graph(
     graph.draw(save_path, format="svg", prog="dot")
     print(f"Graph rendered to {save_path}")
 
-    if auto_open:  # pragma: no cover (xdg-open breaks in CI)
-        # Stderr is redirected here to suppress gvfs-open deprecation warning.
-        # See https://bugs.python.org/issue30219 for an example.
-        subprocess.run(
-            ("xdg-open", str(save_path)), check=False, stderr=subprocess.DEVNULL
-        )
+    if auto_open:
+        try:
+            # Stderr is redirected here to suppress gvfs-open deprecation warning.
+            # See https://bugs.python.org/issue30219 for an example.
+            subprocess.run(
+                ("xdg-open", str(save_path)), check=True, stderr=subprocess.DEVNULL
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Using print rather than logging as this is run interactively.
+            print(
+                "Cannot automatically display graph. Specify an output with -o instead.",
+                file=sys.stderr,
+            )
