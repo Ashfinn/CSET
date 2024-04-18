@@ -18,11 +18,16 @@ Age of air operator.
 This determines how old air is since it entered through the lateral boundary at some given leadtime.
 """
 
+import datetime
+import multiprocessing
 import os
+import tempfile
 from math import atan2, cos, radians, sin, sqrt
 
 import iris
 import numpy as np
+import partial
+from scipy.stats import gaussian_filter
 
 iris.FUTURE.datum_support = True
 
@@ -61,8 +66,8 @@ def aoa_core(
     plev_idx,
     timeunit,
     cyclic,
-    lon_pnt,
     tmpdir,
+    lon_pnt,
 ):
     """
     Part of the multiprocessing capability.
@@ -235,114 +240,119 @@ def compute_ageofair(
 
     """
     # If not None, then use multiple cores to run age of air diagnostic.
-    #    multicore = None
+    multicore = None
+
+    # Set up temporary directory to store intermediate age of air slices.
+    tmpdir = tempfile.mkdtemp()
 
     # Check that all cubes are of same size (will catch different dimension orders too).
     if not XWIND.shape == YWIND.shape == WWIND.shape == GEOPOT.shape:
         raise ValueError("Cubes are not the same shape")
 
-    pass
+    # Get time units and assign for later
+    if str(XWIND.coord("time").units) == "hours since 1970-01-01 00:00:00":
+        timeunit = "hour"
+    else:
+        raise NotImplementedError("Unsupported time base")
 
+    # Make data non-lazy to speed up code.
+    print("Making data non-lazy...")
+    x_arr = XWIND.data
+    y_arr = YWIND.data
+    z_arr = WWIND.data
+    g_arr = GEOPOT.data
 
-#    # Get time units and assign for later
-#    if str(x_wind.coord("time").units) == "hours since 1970-01-01 00:00:00":
-#        timeunit = "hour"
-#    else:
-#        quit("Unsupported time base! Quitting...")
+    # Smooth vertical velocity if using, to 2sigma (standard for 0.5 degree).
+    if incW:
+        print("Smoothing vertical velocity...")
+        for t in range(0, z_arr.shape[0]):
+            for p in range(0, z_arr.shape[1]):
+                z_arr[t, p, :, :] = gaussian_filter(
+                    z_arr[t, p, :, :], [2, 2], mode="nearest"
+                )
+    else:
+        # If not using vertical velocity, set vertical velocity to zero.
+        z_arr[:] = 0
 
-#    # Make data non-lazy to speed up code.
-#    print("Making data non-lazy...")
-#    x_arr = x_wind.data
-#    y_arr = y_wind.data
-#    z_arr = z_wind.data
-#    g_arr = geopot.data
+    # Get time spacing of cube -
+    dt = XWIND.coord("time").points[1:] - XWIND.coord("time").points[:-1]
+    if np.all(dt == dt[0]):
+        dt = dt[0]
+    else:
+        raise NotImplementedError("Time not monotonically increasing, not supported")
 
-#    # Smooth vertical velocity if using, to 2sigma (standard for 0.5 degree).
-#    # TODO could this be a user input, or should it scale with resolution?
-#    if includevertical:
-#        print("Smoothing vertical velocity...")
-#        for t in range(0, z_arr.shape[0]):
-#            for p in range(0, z_arr.shape[1]):
-#                z_arr[t, p, :, :] = gaussian_filter(
-#                    z_arr[t, p, :, :], [2, 2], mode="nearest"
-#                )
-#    else:
-#        z_arr[:] = 0
+    # Get coord points
+    lats = XWIND.coord("latitude").points
+    lons = XWIND.coord("longitude").points
+    time = XWIND.coord("time").points
 
-#    # Get time spacing of cube -
-#    dt = x_wind.coord("time").points[1:] - x_wind.coord("time").points[:-1]
-#    if np.all(dt == dt[0]):
-#        dt = dt[0]
-#    else:
-#        quit("Time not monotonically increasing, not supported...")
+    # Get array index for user specified pressure level.
+    try:
+        plev_idx = np.where(XWIND.coord("pressure").points == plev)[0][0]
+    except IndexError:
+        print(
+            "Can't find plev ",
+            str(plev),
+            " in ",
+            XWIND.coord("pressure").points,
+        )
 
-#    # Get coord points
-#    lats = x_wind.coord("latitude").points
-#    lons = x_wind.coord("longitude").points
-#    time = x_wind.coord("time").points
+    # Initialise cube containing age of air.
+    ageofair_cube = iris.cube.Cube(
+        np.zeros((len(time), len(lats), len(lons))),
+        long_name="age_of_air",
+        dim_coords_and_dims=[
+            (XWIND.coord("time"), 0),
+            (XWIND.coord("latitude"), 1),
+            (XWIND.coord("longitude"), 2),
+        ],
+    )
 
-#    # Get array index for user specified pressure level.
-#    try:
-#        plev_idx = np.where(x_wind.coord("pressure").points == plev)[0][0]
-#    except IndexError:
-#        print("Can't find plev ", str(plev), " in ", x_wind.coord("pressure").points)
-#        quit()
+    print("STARTING AOA DIAG...")
+    start = datetime.datetime.now()
+    if multicore is not None:
+        # Multiprocessing on each longitude slice
+        # TODO: there was an error where 719 was passed to x idx.
+        pool = multiprocessing.Pool(multicore)
+        func = partial(
+            aoa_core,
+            np.copy(x_arr),
+            np.copy(y_arr),
+            np.copy(z_arr),
+            np.copy(g_arr),
+            lats,
+            lons,
+            dt,
+            plev_idx,
+            timeunit,
+            cyclic,
+            tmpdir,
+        )
+        pool.map(func, range(0, XWIND.shape[3]))
+    else:
+        # Single core - better for debugging.
+        for i in range(0, XWIND.shape[3]):
+            aoa_core(
+                x_arr,
+                y_arr,
+                z_arr,
+                g_arr,
+                lats,
+                lons,
+                dt,
+                plev_idx,
+                timeunit,
+                cyclic,
+                tmpdir,
+                i,
+            )
 
-#    # Initialise cube containing age of air.
-#    ageofair_cube = iris.cube.Cube(
-#        np.zeros((len(time), len(lats), len(lons))),
-#        long_name="age_of_air",
-#        dim_coords_and_dims=[
-#            (x_wind.coord("time"), 0),
-#            (x_wind.coord("latitude"), 1),
-#            (x_wind.coord("longitude"), 2),
-#        ],
-#    )
+    # Verbose for time taken to run, and collate tmp ndarrays into final cube, and return
+    print("AOA DIAG DONE, took", (datetime.datetime.now() - start).total_seconds(), "s")
+    for i in range(0, XWIND.shape[3]):
+        ageofair_cube.data[:, :, i] = np.load(
+            tmpdir + "/aoa_frag_" + str(i).zfill(4) + ".npy"
+        )
+        os.remove(tmpdir + "/aoa_frag_" + str(i).zfill(4) + ".npy")
 
-#    print("STARTING AOA DIAG...")
-#    start = datetime.datetime.now()
-#    if multicore is not None:
-#        # Multiprocessing on each longitude slice
-#        # TODO: there was an error where 719 was passed to x idx.
-#        pool = multiprocessing.Pool(multicore)
-#        func = partial(
-#            aoa_core,
-#            np.copy(x_arr),
-#            np.copy(y_arr),
-#            np.copy(z_arr),
-#            np.copy(g_arr),
-#            lats,
-#            lons,
-#            dt,
-#            plev_idx,
-#            timeunit,
-#            cyclic,
-#        )
-#        pool.map(func, range(0, x_wind.shape[3]))
-#    else:
-#        # Single core - better for debugging.
-#        for i in range(0, x_wind.shape[3]):
-#            aoa_core(
-#                x_arr,
-#                y_arr,
-#                z_arr,
-#                g_arr,
-#                lats,
-#                lons,
-#                dt,
-#                plev_idx,
-#                timeunit,
-#                cyclic,
-#                tmpdir,
-#                i,
-#            )
-
-#    # Verbose for time taken to run, and collate tmp ndarrays into final cube, and return
-#    print("AOA DIAG DONE, took", (datetime.datetime.now() - start).total_seconds(), "s")
-#    for i in range(0, x_wind.shape[3]):
-#        ageofair_cube.data[:, :, i] = np.load(
-#            tmpdir + "/aoa_frag_" + str(i).zfill(4) + ".npy"
-#        )
-#        os.remove(tmpdir + "/aoa_frag_" + str(i).zfill(4) + ".npy")
-
-#    return ageofair_cube
+    return ageofair_cube
