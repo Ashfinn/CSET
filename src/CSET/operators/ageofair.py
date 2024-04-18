@@ -56,34 +56,52 @@ def calc_dist(coord_1, coord_2):
 
 
 def aoa_core(
-    x_arr,
-    y_arr,
-    z_arr,
-    g_arr,
-    lats,
-    lons,
-    dt,
-    plev_idx,
-    timeunit,
-    cyclic,
-    tmpdir,
-    lon_pnt,
+    x_arr: np.ndarray,
+    y_arr: np.ndarray,
+    z_arr: np.ndarray,
+    g_arr: np.ndarray,
+    lats: np.ndarray,
+    lons: np.ndarray,
+    dt: int,
+    plev_idx: int,
+    timeunit: str,
+    cyclic: bool,
+    tmpdir: str,
+    lon_pnt: int,
 ):
     """
-    Part of the multiprocessing capability.
+    AOA multiprocessing core.
 
-    Requires access
-    to the full array to do the back trajectory, so there is some scaling of increased
-    no of cores and increased mem demands. For short forecasts, or small latitude arrays,
-    there is not much benefit from multicore (more overhead from IO).
+    Runs the core age of air code on a specific longitude point (all latitudes) for
+    parallelisation.
 
-    Once complete, save latitude row to tmpdir as a ndarray.
+    Arguments
+    ----------
+    x_arr: np.ndarray
+        A numpy array containing x wind data.
+    y_arr: np.ndarray
+        A numpy array containing y wind data.
+    Z_arr: np.ndarray
+        A numpy array containing w wind data, or a placeholder full of zeros if incW is False
+    g_arr: np.ndarray
+        A numpy array containing geopotential height data.
+    lats: np.ndarray
+        A numpy array containing latitude points.
+    lons: np.ndarray
+        A numpy array containing latitude points.
+    dt: int
+        Gap between time intervals
+    plev_idx: int
+        Index of pressure level requested to run back trajectories on.
+    timeunit: str
+        Units of time, currently only accepts 'hour'
+    cyclic: bool
+        Whether to wrap at east/west boundaries. See compute_ageofair for a fuller description.
+    tmpdir: str
+        Path to store intermediate data
+    lon_pnt: int
+        Longitude point to extract and run back trajectories on for parallelisation.
     """
-    # If already run, skip processing.
-    if os.path.exists(tmpdir + "/aoa_frag_" + str(lon_pnt).zfill(4) + ".npy"):
-        print("Already done", lon_pnt, ", skipping")
-        return None
-
     # Initialise empty array to store age of air for this latitude strip.
     ageofair_local = np.zeros((x_arr.shape[0], x_arr.shape[2]))
     print("Working on ", lon_pnt)
@@ -134,9 +152,7 @@ def aoa_core(
                     g = g_arr[leadtime - n, int(z), int(y), int(x)]
 
                     # First, compute horizontal displacement using inverse of horizontal vector
-                    # Convert m/s to m/[samplingrate]h, then m -> deg, then deg -> model gridpoints
-                    # TODO: assume 1 degree is 111km displacement.
-                    # Convert m/s to grid boxes per unit time.
+                    # Convert m/s to m/[samplingrate]h, then m ->  model gridpoints
                     if timeunit == "hour":
                         du = ((u * 60 * 60 * dt) / ew_spacing) * -1.0
                         dv = ((v * 60 * 60 * dt) / ns_spacing) * -1.0
