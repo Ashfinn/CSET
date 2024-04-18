@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Processing for the age of air operator."""
+"""Age of air operator, which determines how old air is since it entered through the lateral boundary at some given leadtime."""
 
 import datetime
 import multiprocessing
