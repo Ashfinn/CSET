@@ -12,6 +12,8 @@ Unreleased
 .. Add your changes here, highlighting any user facing changes. E.g:
 .. "* `@gh-user`_ did foo to bar in :pr:`9999`. This enables baz."
 
+* `@jfrost-mo`_ added a warning when input files don't exist in :pr:`518`. This
+  makes it easier to see where any configuration mistakes were made.
 * `@Sylviabohnenstengel`_ documented the common error of no cubes being loaded
   in :pr:`513`
 * `@Sylviabohnenstengel` and `@jfrost-mo` redid the rose-meta sort orders so
