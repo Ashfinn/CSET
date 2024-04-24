@@ -68,7 +68,7 @@ def test_aoa_noincW_nocyclic(
     """Test case no vertical velocity and not cyclic."""
     assert np.allclose(
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=False, cyclic=False
+            xwind(), ywind(), wwind(), geopot(), plev=500, incW=False, cyclic=False
         ).data,
         iris.load_cube("tests/test_data/ageofair/aoa_out.nc").data,
         rtol=1e-06,
@@ -82,7 +82,7 @@ def test_aoa_incW_nocyclic(
     """Test case including vertical velocity and not cyclic."""
     assert np.allclose(
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=False
+            xwind(), ywind(), wwind(), geopot(), plev=500, incW=True, cyclic=False
         ).data,
         iris.load_cube("tests/test_data/ageofair/aoa_out_incW.nc").data,
         rtol=1e-06,
@@ -96,7 +96,7 @@ def test_aoa_noincW_cyclic(
     """Test case no vertical velocity and cyclic."""
     assert np.allclose(
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=False, cyclic=True
+            xwind(), ywind(), wwind(), geopot(), plev=500, incW=False, cyclic=True
         ).data,
         iris.load_cube("tests/test_data/ageofair/aoa_out_cyclic.nc").data,
         rtol=1e-06,
@@ -110,7 +110,7 @@ def test_aoa_incW_cyclic(
     """Test case including vertical velocity and cyclic."""
     assert np.allclose(
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+            xwind(), ywind(), wwind(), geopot(), plev=500, incW=True, cyclic=True
         ).data,
         iris.load_cube("tests/test_data/ageofair/aoa_out_incW_cyclic.nc").data,
         rtol=1e-06,
@@ -135,10 +135,11 @@ def test_aoa_timefreq(
 ):
     """Variable time intervals raises NotImplemented error."""
     # Missing X coordinate.
+    xwind = xwind()
     xwind.coord("time").points[3] = xwind.coord("time").points[3] + 0.5
     with pytest.raises(NotImplementedError):
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+            xwind, ywind(), wwind(), geopot(), plev=500, incW=True, cyclic=True
         )
 
 
@@ -147,10 +148,11 @@ def test_aoa_timeunits(
 ):
     """Time intervals that are not hourly raises NotImplemented error."""
     # Missing X coordinate.
+    xwind = xwind()
     xwind.coord("time").units = "days since 1970-01-01 00:00:00"
     with pytest.raises(NotImplementedError):
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+            xwind, ywind(), wwind(), geopot(), plev=500, incW=True, cyclic=True
         )
 
 
@@ -160,5 +162,5 @@ def test_aoa_plevreq(
     """Pressure level requested that doesn't exist raises Value error."""
     with pytest.raises(ValueError):
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=123, incW=True, cyclic=True
+            xwind(), ywind(), wwind(), geopot(), plev=123, incW=True, cyclic=True
         )
