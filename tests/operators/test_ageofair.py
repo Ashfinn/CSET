@@ -123,10 +123,10 @@ def test_aoa_mismatched_size(
 ):
     """Mismatched array size raises error."""
     # Missing X coordinate.
-    ywind = ywind[:, :, 1:, :]
+    ywind = ywind()[:, :, 1:, :]
     with pytest.raises(ValueError):
         ageofair.compute_ageofair(
-            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+            xwind(), ywind, wwind(), geopot(), plev=500, incW=True, cyclic=True
         )
 
 
