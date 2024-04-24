@@ -13,3 +13,23 @@
 # limitations under the License.
 
 """Tests age of air operators."""
+
+import numpy as np
+
+import CSET.operators.ageofair as aoa_operators
+
+
+def test_calc_dist():
+    """
+    Test distance calculated from calc_dist in age of air calculation.
+
+    Allow a tolerance of 20km (TBD, expect some error).
+    """
+    # London and Johannesburg coordinates to 2 decimal places.
+    london_coords = (51.51, -0.13)
+    johanbg_coords = (-26.21, 28.03)
+
+    dist = aoa_operators.calc_dist(london_coords, johanbg_coords)
+    actual_distance = 9068670  # Air line according to Google?!
+
+    assert np.allclose(dist, actual_distance, rtol=1e-06, atol=20000)
