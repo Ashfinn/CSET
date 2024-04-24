@@ -22,12 +22,13 @@ import datetime
 import multiprocessing
 import os
 import tempfile
+from functools import partial
 from math import atan2, cos, radians, sin, sqrt
 
 import iris
+import iris.cube
 import numpy as np
-import partial
-from scipy.stats import gaussian_filter
+from scipy.ndimage import gaussian_filter
 
 iris.FUTURE.datum_support = True
 
@@ -260,6 +261,7 @@ def compute_ageofair(
 
     # Set up temporary directory to store intermediate age of air slices.
     tmpdir = tempfile.mkdtemp()
+    print("Made tmpdir", tmpdir)
 
     # Check that all cubes are of same size (will catch different dimension orders too).
     if not XWIND.shape == YWIND.shape == WWIND.shape == GEOPOT.shape:
