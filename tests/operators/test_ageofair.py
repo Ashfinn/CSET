@@ -40,22 +40,26 @@ def test_calc_dist():
 
 def get_xwind() -> iris.cube.Cube:
     """Get regridded xwind to run tests on."""
-    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "x_wind")
+    return iris.load_cube("tests/test_data/ageofair/aoa_in_rgd.nc", "x_wind")
 
 
 def get_ywind() -> iris.cube.Cube:
     """Get regridded ywind to run tests on."""
-    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "y_wind")
+    return iris.load_cube("tests/test_data/ageofair/aoa_in_rgd.nc", "y_wind")
 
 
 def get_wwind() -> iris.cube.Cube:
     """Get regridded wwind to run tests on."""
-    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "upward_air_velocity")
+    return iris.load_cube(
+        "tests/test_data/ageofair/aoa_in_rgd.nc", "upward_air_velocity"
+    )
 
 
 def get_geopot() -> iris.cube.Cube:
     """Get regridded geopotential height to run tests on."""
-    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "geopotential_height")
+    return iris.load_cube(
+        "tests/test_data/ageofair/aoa_in_rgd.nc", "geopotential_height"
+    )
 
 
 def test_aoa_noincW_nocyclic(
