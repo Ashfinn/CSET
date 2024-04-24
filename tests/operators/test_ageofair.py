@@ -14,9 +14,11 @@
 
 """Tests age of air operators."""
 
+import iris
+import iris.cube
 import numpy as np
 
-import CSET.operators.ageofair as aoa_operators
+import CSET.operators.ageofair as ageofair
 
 
 def test_calc_dist():
@@ -29,7 +31,99 @@ def test_calc_dist():
     london_coords = (51.51, -0.13)
     johanbg_coords = (-26.21, 28.03)
 
-    dist = aoa_operators.calc_dist(london_coords, johanbg_coords)
+    dist = ageofair.calc_dist(london_coords, johanbg_coords)
     actual_distance = 9068670  # Air line according to Google?!
 
     assert np.allclose(dist, actual_distance, rtol=1e-06, atol=20000)
+
+
+def get_xwind() -> iris.cube.Cube:
+    """Get regridded xwind to run tests on."""
+    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "x_wind")
+
+
+def get_ywind() -> iris.cube.Cube:
+    """Get regridded ywind to run tests on."""
+    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "y_wind")
+
+
+def get_wwind() -> iris.cube.Cube:
+    """Get regridded wwind to run tests on."""
+    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "upward_air_velocity")
+
+
+def get_geopot() -> iris.cube.Cube:
+    """Get regridded geopotential height to run tests on."""
+    return iris.load("tests/test_data/ageofair/aoa_in_rgd.nc", "geopotential_height")
+
+
+def test_aoa_noincW_nocyclic(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Test case no vertical velocity and not cyclic."""
+    assert np.allclose(
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=False, cyclic=False
+        ).data,
+        iris.load_cube("tests/test_data/ageofair/aoa_out.nc").data,
+        rtol=1e-06,
+        atol=1e-02,
+    )
+
+
+def test_aoa_incW_nocyclic(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Test case including vertical velocity and not cyclic."""
+    assert np.allclose(
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=False
+        ).data,
+        iris.load_cube("tests/test_data/ageofair/aoa_out_incW.nc").data,
+        rtol=1e-06,
+        atol=1e-02,
+    )
+
+
+def test_aoa_noincW_cyclic(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Test case no vertical velocity and cyclic."""
+    assert np.allclose(
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=False, cyclic=True
+        ).data,
+        iris.load_cube("tests/test_data/ageofair/aoa_out_cyclic.nc").data,
+        rtol=1e-06,
+        atol=1e-02,
+    )
+
+
+def test_aoa_incW_cyclic(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Test case including vertical velocity and cyclic."""
+    assert np.allclose(
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+        ).data,
+        iris.load_cube("tests/test_data/ageofair/aoa_out_incW_cyclic.nc").data,
+        rtol=1e-06,
+        atol=1e-02,
+    )
+
+
+# def test_mismatched()
+
+#    """
+#    Test if cubes do not have correct shape, then the age of air function
+#    should raise an exception.
+#    """
+
+# def test_regrid_onto_cube_missing_coord(regrid_source_cube, regrid_test_cube):
+#    """Missing coordinate raises error."""
+#    # Missing X coordinate.
+#    source = regrid_source_cube.copy()
+#    source.remove_coord("longitude")
+#    with pytest.raises(ValueError):
+#        regrid.regrid_onto_cube(source, regrid_test_cube, method="Linear")
