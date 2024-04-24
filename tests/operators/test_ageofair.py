@@ -17,6 +17,7 @@
 import iris
 import iris.cube
 import numpy as np
+import pytest
 
 import CSET.operators.ageofair as ageofair
 
@@ -113,17 +114,47 @@ def test_aoa_incW_cyclic(
     )
 
 
-# def test_mismatched()
+def test_aoa_mismatched_size(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Mismatched array size raises error."""
+    # Missing X coordinate.
+    ywind = ywind[:, :, 1:, :]
+    with pytest.raises(ValueError):
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+        )
 
-#    """
-#    Test if cubes do not have correct shape, then the age of air function
-#    should raise an exception.
-#    """
 
-# def test_regrid_onto_cube_missing_coord(regrid_source_cube, regrid_test_cube):
-#    """Missing coordinate raises error."""
-#    # Missing X coordinate.
-#    source = regrid_source_cube.copy()
-#    source.remove_coord("longitude")
-#    with pytest.raises(ValueError):
-#        regrid.regrid_onto_cube(source, regrid_test_cube, method="Linear")
+def test_aoa_timefreq(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Variable time intervals raises NotImplemented error."""
+    # Missing X coordinate.
+    xwind.coord("time").points[3] = xwind.coord("time").points[3] + 0.5
+    with pytest.raises(NotImplementedError):
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+        )
+
+
+def test_aoa_timeunits(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Time intervals that are not hourly raises NotImplemented error."""
+    # Missing X coordinate.
+    xwind.coord("time").units = "days since 1970-01-01 00:00:00"
+    with pytest.raises(NotImplementedError):
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=500, incW=True, cyclic=True
+        )
+
+
+def test_aoa_plevreq(
+    xwind=get_xwind, ywind=get_ywind, wwind=get_wwind, geopot=get_geopot
+):
+    """Pressure level requested that doesn't exist raises Value error."""
+    with pytest.raises(ValueError):
+        ageofair.compute_ageofair(
+            xwind, ywind, wwind, geopot, plev=123, incW=True, cyclic=True
+        )
