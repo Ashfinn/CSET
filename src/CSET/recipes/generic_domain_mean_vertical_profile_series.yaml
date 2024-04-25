@@ -4,24 +4,21 @@ description: Plots a time series of the domain mean surface $VARNAME.
 
 # Pre-processing steps.
 parallel:
-  - operator: read.read_cubes
+  - operator: read.read_cube
     constraint:
       operator: constraints.combine_constraints
-      varname_constraint:
+      variable_constraint:
         operator: constraints.generate_var_constraint
         varname: $VARNAME
+#      cell_methods_constraint:
+#        operator: constraints.generate_cell_methods_constraint
+#        cell_methods: []
       pressure_level_constraint:
         operator: constraints.generate_pressure_level_constraint
         pressure_levels: $PLEVEL
       validity_time_constraint:
         operator: constraints.generate_time_constraint
         time_start: $VALIDITY_TIME
-
-  # Use a filter to merge the time slices into a single cube
-  - operator: filters.filter_cubes
-    constraint:
-      operator: constraints.generate_var_constraint
-      varname: $VARNAME
 
 
   - operator: collapse.collapse
@@ -30,7 +27,7 @@ parallel:
 
   # Save domain meaned variable to a file per validity time.
   - operator: write.write_cube_to_nc
-    filename: intermediate/domain_mean
+    filename: intermediate/pressure_level_domain_mean
 
 # Collation steps.
 # Reads in intermediate cube and plots it.
