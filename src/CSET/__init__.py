@@ -135,6 +135,7 @@ def main():
 
     cli_args = sys.argv[1:] + os.getenv("CSET_ADDOPTS", "").split()
     args, unparsed_args = parser.parse_known_args(cli_args)
+    print(args, unparsed_args, file=sys.stderr)
 
     # Setup logging.
     logging.captureWarnings(True)
