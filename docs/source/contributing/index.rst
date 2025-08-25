@@ -13,6 +13,7 @@ need to get started, and the links below go into more detail on specific topics.
     testing
     documentation
     code-review
+    dependencies
     releases
 
 Contributing checklist
@@ -47,18 +48,20 @@ you need to add the file again with git add and rerun the commit.
 .. image:: failing_pr_check.png
     :alt: Pull request checks, with a couple failing. The details link is highlighted.
 
-Added an entry to the top of ``docs/source/changelog.rst``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Ensured the pull request title is descriptive
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For any non-trivial change an entry in the :doc:`/changelog` should be created.
-Put a line describing your change in the Unreleased section at the top of the
-file. Take inspiration from the other entries, and link to your PR using the
-``:pr:`123``` directive. If this is your first time contributing also link your
-GitHub username to your profile by adding the following line in that section:
+The title of a pull request should clearly describe what the pull request
+changes, and in particular should highlight any breaking changes.
 
-.. code-block:: rst
+The titles of pull requests are used to compile the release notes and
+:doc:`/changelog`, therefore it is important that they are easy to understand
+for people who are not familiar with the code. Descriptive pull request titles
+also makes it easier to search for changes; useful when a bug was introduced.
 
-    .. _@username: https://github.com/username
+The pull request title can be edited by clicking the "Edit" button to its right.
+If you need more text to describe what the pull request does, please add it in
+the description.
 
 Conda lock files have been updated if dependencies changed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -70,6 +73,19 @@ branch. (Not the default ``main`` branch!)
 
 .. _update conda lock files workflow: https://github.com/MetOffice/CSET/actions/workflows/conda-lock.yml
 
+Attributed any Generative AI, such as GitHub Copilot, used in this PR
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generative AI tools such as GitHub Copilot are useful, but there are still
+unanswered questions around the copyright of their output. Therefore CSET
+contributions that used Generative AI must disclose it, along with the name of
+the AI tool used. This can be a simple statement in the PR description, for
+example:
+
+.. code-block:: text
+
+    This PR contains AI generated code from GitHub Copilot.
+
 Marked the PR as ready to review
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -79,4 +95,4 @@ Marked the PR as ready to review
     :alt: Green status symbol indicating an open PR ready for review.
 
 If you opened the PR as a draft make sure it is marked as ready for review with
-a green status symbol when you want others to look at it.
+a green status symbol when it is ready for others to look at it.

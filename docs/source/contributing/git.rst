@@ -5,17 +5,17 @@ If you haven't used git before, it is worth spending some time learning it
 before getting stuck into development. git is the go-to code revision control
 system, and is useful whether you are working alone or with others.
 
-A good place to start learning is this `git and GitHub tutorial`_. Once you have
-done that it is worth reading about the `GitHub flow`_, which is the approximate
-way you should be using GitHub, as well as this short article on writing `good
-commit messages`_.
+A good place to start learning is the `Met Office git and GitHub tutorial`_.
+Once you have done that it is worth reading about the `GitHub flow`_, which is
+the approximate way you should be using GitHub, as well as this short article on
+writing `good commit messages`_.
 
 For using git locally, you can use either the CLI git program, or git
 functionality built into many IDEs, such as VSCode or PyCharm. As you get
 started with git on the command line, you may find this `git cheat sheet`_
 helpful.
 
-.. _git and GitHub tutorial: https://aaronosher.io/github-workshop/
+.. _Met Office git and GitHub tutorial: https://metoffice.github.io/git-novice/
 .. _GitHub flow: https://docs.github.com/en/get-started/quickstart/github-flow
 .. _good commit messages: https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 .. _git cheat sheet: https://education.github.com/git-cheat-sheet-education.pdf
@@ -43,30 +43,87 @@ Authenticating git with GitHub
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When you clone a private repository GitHub needs to verify you have permission
-to access it. There are two ways of authentication in git: via HTTPS, or via
-SSH, with SSH being recommended.
-
-Cloning via HTTPS is good for when you are behind restrictive proxies that block
-all internet traffic except websites. You will either have to setup the `Git
-Credential Manager`_, which may not be installed by default, or use the `GitHub
-CLI to authenticate`_, and `configure git to use it`_. In environments where you
-can't install additional software, use the SSH method instead.
+to access it. There are two ways of authentication in git: via SSH, or via
+HTTPS, with SSH being recommended.
 
 Cloning via SSH is good when you already have an SSH key, and it is simpler (and
 arguably more secure) than cloning via HTTPS. `GitHub's documentation on SSH`_
 covers setting it up. To access repositories within an enterprise environment
 (such as this one) you will also have to `setup single sign-on`_.
 
-.. _Git Credential Manager: https://github.com/GitCredentialManager/git-credential-manager/blob/main/README.md
+Cloning via HTTPS is good for when you are behind restrictive firewalls that
+block all internet traffic except websites. You will either have to setup a
+`personal access token`_ and `Git Credential Manager`_, or use the `GitHub CLI
+to authenticate`_, and `configure git to use it`_. In environments where you
+can't install additional software, use the SSH method instead.
+
+Git will default to the protocol used to clone the repository i.e. SSH or HTTPS.
+If you have cloned the Git repository with HTTPS you might encounter
+difficulties with pushing changes back into the repository, with it asking for a
+username and password. You can verify the access method with:
+
+.. code-block:: bash
+
+    git remote -v
+
+If SSH is configured the command will give you:
+
+.. code-block:: text
+
+    origin	git@github.com:MetOffice/CSET.git (fetch)
+    origin	git@github.com:MetOffice/CSET.git (push)
+
+If HTTPS is configured it will give you:
+
+.. code-block:: text
+
+    origin  https://github.com/MetOffice/CSET.git (fetch)
+    origin  https://github.com/MetOffice/CSET.git (push)
+
+To avoid having to use a username and password you can switch to SSH:
+
+.. code-block:: bash
+
+    git remote set-url origin git@github.com:MetOffice/CSET.git
+
+.. _Git Credential Manager: https://github.com/git-ecosystem/git-credential-manager/blob/main/README.md
 .. _GitHub CLI to authenticate: https://cli.github.com/manual/gh_auth_login
 .. _configure git to use it: https://cli.github.com/manual/gh_auth_setup-git
 .. _GitHub's documentation on SSH: https://docs.github.com/en/authentication/connecting-to-github-with-ssh
 .. _setup single sign-on: https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-saml-single-sign-on/authorizing-an-ssh-key-for-use-with-saml-single-sign-on
+.. _personal access token: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
+
+Useful git commands
+-------------------
+
+While git has many commands, for most things you will find the following list of
+commands sufficient. More detail on each of these commands can be found in the
+`git reference documentation`_.
+
+.. csv-table::
+    :header: "Command", "Description"
+    :widths: auto
+
+    "``git status``", "Status of repository, showing changed files, etc."
+    "``git clone <repo-url>``", "Download code"
+    "``git add <filename>``", "Add a modified or new file to your next commit"
+    "``git branch``", "List local branches"
+    "``git switch <branch>``", "Switch to an existing branch"
+    "``git switch -c <branch>``", "Create a new branch in your local repository"
+    "``git commit``", "Commit changes to local repository"
+    "``git push``", "Push changes or new branch up to the remote repository (GitHub)"
+    "``git log``", "Log of previous commits in current branch"
+    "``git diff``", "Show changes since last commit in local directory"
+    "``git fetch``", "Fetch remote changes from GitHub, but don't apply them"
+    "``git merge <src-branch>``", "Merge changes from another branch into the current one"
+    "``git pull``", "Update local branch with remote changes (a combined fetch and merge)"
+
+.. _git reference documentation: https://git-scm.com/docs
 
 .. _pull-request:
 
-Pull Requests
--------------
+Pull Request
+------------
 
 A pull request is how you submit code for inclusion in CSET. All code changes
 must go through a pull request. Pushing directly to the main branch has been
@@ -170,16 +227,13 @@ and the changes you have made will be applied to it sequentially.
 
 Git will try and do this automatically, however if a conflict occurs it needs to
 be manually resolved before running ``git rebase --continue`` to finish the
-rebase.
-
-There is a good overview of rebasing in `these slides`_, and the `official
-documentation on rebase`_ goes into a lot more detail.
+rebase. The `official documentation on rebase`_ contains a lot of detail on the
+specifics of rebasing.
 
 When rebasing or merging there are times when git cannot proceed. This is called
 a conflict and often occurs if you have changed a line that was also changed in
 the other branch. Git will stop and let you manually fix it. Read the
 `documentation on fixing merge conflicts`_ to find out how.
 
-.. _these slides: https://aaronosher.io/github-workshop/#rebase
 .. _official documentation on rebase: https://git-scm.com/book/en/v2/Git-Branching-Rebasing
 .. _documentation on fixing merge conflicts: https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging#_basic_merge_conflicts

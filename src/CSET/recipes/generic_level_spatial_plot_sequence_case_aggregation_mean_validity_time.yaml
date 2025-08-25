@@ -1,0 +1,31 @@
+category: $LEVELTYPE Level Spatial
+title: "$MODEL_NAME $VARNAME $LEVELTYPE$LEVEL\n Aggregation by validity time"
+description: |
+  Extracts ands plots the $VARNAME from $MODEL_NAME at $LEVELTYPE level $LEVEL.
+  Multiple cases are aggregated together keeping the validity time consistent.
+
+steps:
+  - operator: read.read_cubes
+    file_paths: $INPUT_PATHS
+    constraint:
+      operator: constraints.combine_constraints
+      variable_constraint:
+        operator: constraints.generate_var_constraint
+        varname: $VARNAME
+      level_constraint:
+        operator: constraints.generate_level_constraint
+        coordinate: $LEVELTYPE
+        levels: $LEVEL
+    subarea_type: $SUBAREA_TYPE
+    subarea_extent: $SUBAREA_EXTENT
+
+  - operator: aggregate.ensure_aggregatable_across_cases
+
+  - operator: collapse.collapse_by_validity_time
+    method: MEAN
+
+  - operator: plot.spatial_contour_plot
+    sequence_coordinate: time
+
+  - operator: write.write_cube_to_nc
+    overwrite: True

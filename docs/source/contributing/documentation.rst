@@ -10,18 +10,21 @@ maintain documentation within the version control system, and keep it up to
 date. The `Sphinx website`_ has a useful primer to using reStructuredText for
 documentation.
 
-The documentation is organised intro sections following the `Divio documentation
-system`_.
+The documentation is organised into sections following the `Diátaxis
+documentation system`_.
 
-You can build the documentation of CSET with the following command:
+You can build the documentation of CSET with the following commands:
 
 .. code-block:: bash
 
-    tox -e docs
+    # Ensure you are in the docs directory.
+    cd docs
+    # Build the HTML documentation.
+    make html
 
-The documentation will be output to the docs/build directory.
+The documentation will be output to the docs/build/html directory.
 
-.. _Divio documentation system: https://documentation.divio.com/
+.. _Diátaxis documentation system: https://diataxis.fr/
 
 Docstrings
 ----------

@@ -1,4 +1,4 @@
-# Copyright 2022-2024 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,14 +14,15 @@
 
 """Common functionality used across CSET."""
 
+import ast
 import io
 import json
 import logging
 import re
-import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Union
+from textwrap import dedent
+from typing import Any
 
 import ruamel.yaml
 
@@ -30,13 +31,15 @@ class ArgumentError(ValueError):
     """Provided arguments are not understood."""
 
 
-def parse_recipe(recipe_yaml: Union[Path, str], variables: dict = None):
+def parse_recipe(recipe_yaml: Path | str, variables: dict | None = None) -> dict:
     """Parse a recipe into a python dictionary.
 
     Parameters
     ----------
     recipe_yaml: Path | str
-        Path to recipe file, or the recipe YAML directly.
+        Path to a file containing, or a string of, a recipe's YAML describing
+        the operators that need running. If a Path is provided it is opened and
+        read.
     variables: dict
         Dictionary of recipe variables. If None templating is not attempted.
 
@@ -57,7 +60,7 @@ def parse_recipe(recipe_yaml: Union[Path, str], variables: dict = None):
     Examples
     --------
     >>> CSET._common.parse_recipe(Path("myrecipe.yaml"))
-    {'parallel': [{'operator': 'misc.noop'}]}
+    {'steps': [{'operator': 'misc.noop'}]}
     """
     # Ensure recipe_yaml is something the YAML parser can read.
     if isinstance(recipe_yaml, str):
@@ -71,16 +74,15 @@ def parse_recipe(recipe_yaml: Union[Path, str], variables: dict = None):
             recipe = yaml.load(recipe_yaml)
         except ruamel.yaml.parser.ParserError as err:
             raise ValueError("ParserError: Invalid YAML") from err
-        except ruamel.yaml.error.YAMLStreamError as err:
-            raise TypeError("Must provide a file object (with a read method)") from err
 
-    logging.debug(recipe)
+    logging.debug("Recipe before templating:\n%s", recipe)
     check_recipe_has_steps(recipe)
 
     if variables is not None:
         logging.debug("Recipe variables: %s", variables)
         recipe = template_variables(recipe, variables)
 
+    logging.debug("Recipe after templating:\n%s", recipe)
     return recipe
 
 
@@ -88,7 +90,7 @@ def check_recipe_has_steps(recipe: dict):
     """Check a recipe has the minimum required steps.
 
     Checking that the recipe actually has some steps, and providing helpful
-    error messages otherwise. We must have at least a parallel step, as that
+    error messages otherwise. We must have at least a steps step, as that
     reads the raw data.
 
     Parameters
@@ -105,24 +107,15 @@ def check_recipe_has_steps(recipe: dict):
     KeyError
         If needed recipe variables are not supplied.
     """
-    parallel_steps_key = "parallel"
     if not isinstance(recipe, dict):
         raise TypeError("Recipe must contain a mapping.")
-    if "parallel" not in recipe:
-        if "steps" in recipe:
-            warnings.warn(
-                "'steps' recipe key is deprecated, use 'parallel' instead.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            parallel_steps_key = "steps"
-        else:
-            raise ValueError("Recipe must contain a 'parallel' key.")
+    if "steps" not in recipe:
+        raise ValueError("Recipe must contain a 'steps' key.")
     try:
-        if len(recipe[parallel_steps_key]) < 1:
-            raise ValueError("Recipe must have at least 1 parallel step.")
+        if len(recipe["steps"]) < 1:
+            raise ValueError("Recipe must have at least 1 step.")
     except TypeError as err:
-        raise ValueError("'parallel' key must contain a sequence of steps.") from err
+        raise ValueError("'steps' key must contain a sequence of steps.") from err
 
 
 def slugify(s: str) -> str:
@@ -142,11 +135,13 @@ def get_recipe_metadata() -> dict:
     except FileNotFoundError:
         meta = {}
         with open("meta.json", "wt", encoding="UTF-8") as fp:
-            json.dump(meta, fp)
+            json.dump(meta, fp, indent=2)
         return {}
 
 
-def parse_variable_options(arguments: list[str]) -> dict:
+def parse_variable_options(
+    arguments: list[str], input_dir: str | list[str] | None = None
+) -> dict:
     """Parse a list of arguments into a dictionary of variables.
 
     The variable name arguments start with two hyphen-minus (`--`), consisting
@@ -157,6 +152,8 @@ def parse_variable_options(arguments: list[str]) -> dict:
     ----------
     arguments: list[str]
         List of arguments, e.g: `["--LEVEL", "2", "--STASH=m01s01i001"]`
+    input_dir: str | list[str], optional
+        List of input directories to add into the returned variables.
 
     Returns
     -------
@@ -168,12 +165,16 @@ def parse_variable_options(arguments: list[str]) -> dict:
     ValueError
         If any arguments cannot be parsed.
     """
+    # Convert --input_dir=... to INPUT_PATHS recipe variable.
+    if input_dir is not None:
+        abs_paths = [str(Path(p).absolute()) for p in iter_maybe(input_dir)]
+        arguments.append(f"--INPUT_PATHS={abs_paths}")
     recipe_variables = {}
     i = 0
     while i < len(arguments):
-        if re.match(r"^--[A-Z_]+=.*$", arguments[i]):
+        if re.fullmatch(r"--[A-Z_]+=.*", arguments[i]):
             key, value = arguments[i].split("=", 1)
-        elif re.match(r"^--[A-Z_]+$", arguments[i]):
+        elif re.fullmatch(r"--[A-Z_]+", arguments[i]):
             try:
                 key = arguments[i].strip("-")
                 value = arguments[i + 1]
@@ -183,14 +184,18 @@ def parse_variable_options(arguments: list[str]) -> dict:
         else:
             raise ArgumentError(f"Unknown argument: {arguments[i]}")
         try:
-            recipe_variables[key.strip("-")] = json.loads(value)
-        except json.JSONDecodeError:
+            # Remove quotes from arguments, in case left in CSET_ADDOPTS.
+            if re.fullmatch(r"""["'].+["']""", value):
+                value = value[1:-1]
+            recipe_variables[key.strip("-")] = ast.literal_eval(value)
+        # Capture the many possible exceptions from ast.literal_eval
+        except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
             recipe_variables[key.strip("-")] = value
         i += 1
     return recipe_variables
 
 
-def template_variables(recipe: Union[dict, list], variables: dict) -> dict:
+def template_variables(recipe: dict | list, variables: dict) -> dict:
     """Insert variables into recipe.
 
     Parameters
@@ -226,14 +231,25 @@ def template_variables(recipe: Union[dict, list], variables: dict) -> dict:
     return recipe
 
 
-def replace_template_variable(s: str, variables):
+def replace_template_variable(s: str, variables: dict[str, Any]):
     """Fill all variable placeholders in the string."""
     for var_name, var_value in variables.items():
         placeholder = f"${var_name}"
         # If the value is just the placeholder we directly overwrite it
         # to keep the value type.
         if s == placeholder:
+            # Specially handle Paths and lists of Paths.
+            if isinstance(var_value, Path):
+                var_value = str(var_value)
+            if (
+                isinstance(var_value, list)
+                and var_value
+                and isinstance(var_value[0], Path)
+            ):
+                var_value = [str(p) for p in var_value]
             s = var_value
+            # We have replaced the whole string, so stop here to avoid
+            # interpreting the new value.
             break
         else:
             s = s.replace(placeholder, str(var_value))
@@ -334,3 +350,69 @@ def iter_maybe(thing) -> Iterable:
     if isinstance(thing, Iterable) and not isinstance(thing, str):
         return thing
     return (thing,)
+
+
+def human_sorted(iterable: Iterable, reverse: bool = False) -> list:
+    """Sort such numbers within strings are sorted correctly."""
+    # Adapted from https://nedbatchelder.com/blog/200712/human_sorting.html
+
+    def alphanum_key(s):
+        """Turn a string into a list of string and number chunks.
+
+        >>> alphanum_key("z23a")
+        ["z", 23, "a"]
+        """
+        try:
+            return [int(c) if c.isdecimal() else c for c in re.split(r"(\d+)", s)]
+        except TypeError:
+            return s
+
+    return sorted(iterable, key=alphanum_key, reverse=reverse)
+
+
+def combine_dicts(d1: dict, d2: dict) -> dict:
+    """Recursively combines two dictionaries.
+
+    Duplicate atoms favour the second dictionary.
+    """
+    # Update existing keys.
+    for key in d1.keys() & d2.keys():
+        if isinstance(d1[key], dict):
+            d1[key] = combine_dicts(d1[key], d2[key])
+        else:
+            d1[key] = d2[key]
+    # Add any new keys.
+    for key in d2.keys() - d1.keys():
+        d1[key] = d2[key]
+    return d1
+
+
+def sort_dict(d: dict) -> dict:
+    """Recursively sort a dictionary."""
+    # Thank you to https://stackoverflow.com/a/47882384
+    return {
+        k: sort_dict(v) if isinstance(v, dict) else v
+        for k, v in human_sorted(d.items())
+    }
+
+
+def sstrip(text):
+    """Dedent and strip text.
+
+    Parameters
+    ----------
+    text: str
+        The string to strip.
+
+    Examples
+    --------
+    >>> print(sstrip('''
+    ...     foo
+    ...       bar
+    ...     baz
+    ... '''))
+    foo
+      bar
+    baz
+    """
+    return dedent(text).strip()

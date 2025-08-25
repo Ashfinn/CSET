@@ -3,8 +3,9 @@ description: |
   Extracts out the instantaneous 1.5m air temperature from a file and writes it
   to a new one.
 
-parallel:
+steps:
   - operator: read.read_cubes
+    file_paths: $INPUT_PATHS
     constraint:
       operator: constraints.generate_stash_constraint
       stash: m01s03i236

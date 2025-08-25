@@ -1,0 +1,34 @@
+category: Time Series
+title: Time series of $VARNAME at $LATITUDE_POINT N, $LONGITUDE_POINT E ($LATLON_IN_TYPE)
+description: Plots a time series of the $VARNAME at a selected gridpoint.
+
+steps:
+  - operator: read.read_cubes
+    file_paths: $INPUT_PATHS
+    model_names: $MODEL_NAME
+    constraint:
+      operator: constraints.combine_constraints
+      varname_constraint:
+        operator: constraints.generate_var_constraint
+        varname: $VARNAME
+      cell_methods_constraint:
+        operator: constraints.generate_cell_methods_constraint
+        cell_methods: []
+        varname: $VARNAME
+      pressure_level_constraint:
+        operator: constraints.generate_level_constraint
+        levels: []
+        coordinate: "pressure"
+
+  - operator: regrid.regrid_to_single_point
+    lat_pt: $LATITUDE_POINT
+    lon_pt: $LONGITUDE_POINT
+    latlon_in_type: $LATLON_IN_TYPE
+    method: $SINGLE_POINT_METHOD
+
+  # Make a single NetCDF with all the data inside it.
+  - operator: write.write_cube_to_nc
+    overwrite: True
+
+  # Plot the data.
+  - operator: plot.plot_line_series

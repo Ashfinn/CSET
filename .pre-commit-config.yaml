@@ -5,26 +5,48 @@ ci:
 
 repos:
   - repo: https://github.com/codespell-project/codespell
-    rev: 6e41aba91fb32e9feb741a6258eefeb9c6e4a482  # frozen: v2.2.6
+    rev: 63c8f8312b7559622c0d82815639671ae42132ac  # frozen: v2.4.1
     hooks:
-    - id: codespell
-      # Additional dependency needed until Python 3.11 is our minimum version.
-      additional_dependencies:
-        - tomli
+      - id: codespell
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: 596470fba20d04adc68ec7903ff69a12e5e1a8d3  # frozen: v0.4.2
+    rev: 54a455f7ce629598b7535ff828fd5fb796f4b83f  # frozen: v0.12.9
     hooks:
-      - id: ruff
-        args: [ --fix, --show-fixes, --exit-non-zero-on-fix ]
+      - id: ruff-check
+        args: [--fix, --show-fixes, --exit-non-zero-on-fix]
       - id: ruff-format
 
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: local
+    hooks:
+      - id: sort-json
+        name: Sort JSON
+        description: Recursively sort JSON files by key.
+        entry: ./scripts/sort_json.py
+        language: script
+        types: [json]
+        files: src/CSET/operators/_colorbar_definition.json
+
+  - repo: local
+    hooks:
+      - id: regenerate-rose-meta
+        name: Regenerate rose metadata
+        description: Ensure the rose metadata has been generated from its template.
+        entry: ./scripts/generate_rose_meta.py
+        language: python
+        files: src/CSET/workflow/files/meta/
+        additional_dependencies:
+          - jinja2
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: 2c9f875913ee60ca25ce70243dc24d5b6415598c  # frozen: v4.6.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: check-added-large-files
-        args: ['--maxkb=10240']
+        args: ["--maxkb=10240"]
       - id: check-case-conflict
       - id: check-merge-conflict
       - id: check-toml

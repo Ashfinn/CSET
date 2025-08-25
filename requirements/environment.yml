@@ -1,15 +1,19 @@
 name: cset-dev
 channels:
   - conda-forge
+  - nodefaults
 dependencies:
   # Runtime dependencies
   - numpy
-  - iris >= 3.5
+  - iris >= 3.12.2
   - ruamel.yaml >= 0.17
   - mo_pack # For handling pp files.
   - pygraphviz
   - isodate
   - markdown-it-py >= 3.0
+  - nc-time-axis
+  - iris-grib
+  - importlib_resources # For python < 3.12
 
   # Build dependencies
   - setuptools>=64
@@ -21,11 +25,10 @@ dependencies:
   - ruff
 
   # Testing dependencies
-  - tox < 4.0
-  - tox-conda
   - pytest >= 7.0
   - pytest-cov
+  - pytest-xdist
 
   # Documentation dependencies
   - sphinx >= 6.0
-  - furo
+  - furo >= 2024.8.6

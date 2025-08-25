@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# This is simple wrapper script for apps in this suite,
+# designed to set up the appropriate Python environment.
+#
+# Usage: app_env_wrapper CMD [cmd_opts]
+
+set -euo pipefail
+
+# Load modules.
+if [[ $CSET_ENV_USE_MODULES == True ]]; then
+  IFS_SAVE=$IFS
+  IFS=' '
+  if [[ "$MODULES_PURGE" ]]; then
+    module purge
+  fi
+  for module in $MODULES_LIST; do
+    module load "$module"
+  done
+  IFS="$IFS_SAVE"
+  module list
+fi
+
+# Add separately maintained METplus to PATH.
+if [[ "$CSET_ENV_SEPARATE_MET" == True ]]; then
+  echo "Using separate installation of METplus."
+  export LD_LIBRARY_PATH="${MET_LIBRARIES}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export PATH="${METPLUS_BASE}/ush:${MET_BUILD_BASE}/bin:${PATH}"
+fi
+
+# Ensure CONDA_PATH is defined.
+if [[ -d "$CONDA_PATH" ]]; then
+  echo "Sourcing conda from ${CONDA_PATH}"
+else
+  CONDA_PATH=""
+fi
+
+# Run under conda environment if one is linked.
+if [[ -d "${CYLC_WORKFLOW_RUN_DIR}/conda-environment" ]]; then
+  echo "Using conda environment from ${CYLC_WORKFLOW_RUN_DIR}/conda-environment"
+  # Don't capture output so logs are seen while the program is still running.
+  exec "${CONDA_PATH}conda" run --no-capture-output --prefix "${CYLC_WORKFLOW_RUN_DIR}/conda-environment" "$@"
+elif conda info --envs | grep -q '^cset-dev '; then
+  echo "No linked conda environment. Attempting to use 'cset-dev' environment."
+  exec "${CONDA_PATH}conda" run --no-capture-output --name cset-dev "$@"
+else
+  echo "No conda environment to use. Attempting last-ditch attempt to run directly."
+  exec "$@"
+fi

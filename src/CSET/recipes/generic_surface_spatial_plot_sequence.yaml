@@ -1,9 +1,11 @@
-category: Quick Look
-title: Surface $VARNAME
-description: Extracts and plots the surface $VARNAME from a file.
+category: Surface Spatial Plot
+title: $MODEL_NAME $VARNAME $METHOD
+description: Extracts and plots the $METHOD of $VARNAME from all times in $MODEL_NAME.
 
-parallel:
+steps:
   - operator: read.read_cube
+    file_paths: $INPUT_PATHS
+
     constraint:
       operator: constraints.combine_constraints
       varname_constraint:
@@ -12,21 +14,19 @@ parallel:
       cell_methods_constraint:
         operator: constraints.generate_cell_methods_constraint
         cell_methods: []
-      pressure_level_constraint:
-        operator: constraints.generate_pressure_level_constraint
-        pressure_levels: []
-      validity_time_constraint:
-        operator: constraints.generate_time_constraint
-        time_start: $VALIDITY_TIME
+        varname: $VARNAME
+      level_constraint:
+        operator: constraints.generate_level_constraint
+        coordinate: "pressure"
+        levels: []
+    subarea_type: $SUBAREA_TYPE
+    subarea_extent: $SUBAREA_EXTENT
 
-  - operator: write.write_cube_to_nc
-    filename: intermediate/surface_field
+  - operator: collapse.collapse
+    coordinate: [time]
+    method: $METHOD
 
-collate:
-  - operator: read.read_cube
-    filename_pattern: intermediate/*.nc
-
-  - operator: plot.spatial_contour_plot
+  - operator: plot.spatial_pcolormesh_plot
     sequence_coordinate: time
 
   - operator: write.write_cube_to_nc

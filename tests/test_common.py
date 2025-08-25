@@ -1,4 +1,4 @@
-# Copyright 2023 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,12 +25,12 @@ import CSET._common as common
 def test_parse_recipe_string():
     """Loading and parsing of a YAML recipe from a string."""
     valid_recipe = """\
-    parallel:
+    steps:
         operator: misc.noop
         arg1: Hello
     """
     parsed = common.parse_recipe(valid_recipe)
-    assert parsed == {"parallel": {"operator": "misc.noop", "arg1": "Hello"}}
+    assert parsed == {"steps": {"operator": "misc.noop", "arg1": "Hello"}}
 
 
 def test_parse_recipe_path():
@@ -39,7 +39,7 @@ def test_parse_recipe_path():
     expected = {
         "title": "Noop",
         "description": "A recipe that does nothing. Only used for testing.",
-        "parallel": [
+        "steps": [
             {
                 "operator": "misc.noop",
                 "test_argument": "Banana",
@@ -47,8 +47,16 @@ def test_parse_recipe_path():
                 "substep": {"operator": "constraints.combine_constraints"},
             }
         ],
-        "collate": [{"operator": "misc.noop"}],
     }
+    assert parsed == expected
+
+
+def test_parse_recipe_insert_variables():
+    """Test insertion of variables into a recipe."""
+    recipe_yaml = '{"steps": [{"operator": "misc.noop", "argument": "$VALUE"}]}'
+    variables = {"VALUE": 42}
+    parsed = common.parse_recipe(recipe_yaml, variables)
+    expected = {"steps": [{"operator": "misc.noop", "argument": 42}]}
     assert parsed == expected
 
 
@@ -60,49 +68,45 @@ def test_parse_recipe_exception_missing():
 
 def test_parse_recipe_exception_type():
     """Exception for incorrect type."""
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="recipe_yaml must be a str or Path."):
         common.parse_recipe(True)
 
 
 def test_parse_recipe_exception_invalid_yaml():
     """Exception for invalid YAML."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="ParserError: Invalid YAML"):
         common.parse_recipe('"Inside quotes" outside of quotes')
 
 
 def test_parse_recipe_exception_invalid_recipe():
     """Exception for valid YAML but invalid recipe."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Recipe must contain a 'steps' key."):
         common.parse_recipe("a: 1")
 
 
 def test_parse_recipe_exception_blank():
     """Exception for blank recipe."""
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Recipe must contain a mapping."):
         common.parse_recipe("")
 
 
-def test_parse_recipe_exception_no_parallel():
-    """Exception for recipe without any parallel steps."""
-    with pytest.raises(ValueError):
-        common.parse_recipe("parallel: []")
+def test_parse_recipe_exception_no_steps():
+    """Exception for recipe without any steps steps."""
+    with pytest.raises(ValueError, match="Recipe must have at least 1 step"):
+        common.parse_recipe("steps: []")
 
 
-def test_parse_recipe_exception_parallel_not_sequence():
-    """Exception for recipe with parallel containing an atom."""
-    with pytest.raises(ValueError):
-        common.parse_recipe("parallel: 7")
-
-
-def test_parse_recipe_deprecated_steps():
-    """Deprecation warning when falling back to steps key."""
-    with pytest.warns(DeprecationWarning):
-        common.parse_recipe('steps: [{"operator": "misc.noop"}]')
+def test_parse_recipe_exception_steps_not_sequence():
+    """Exception for recipe with steps containing an atom."""
+    with pytest.raises(
+        ValueError, match="'steps' key must contain a sequence of steps."
+    ):
+        common.parse_recipe("steps: 7")
 
 
 def test_parse_recipe_exception_non_dict():
     """Exception for recipe that parses to a non-dict."""
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Recipe must contain a mapping."):
         common.parse_recipe("[]")
 
 
@@ -135,38 +139,92 @@ def test_parse_variable_options():
         common.parse_variable_options(("--VARIABLE",))
 
 
+def test_parse_variable_options_quoted():
+    """Quoted arguments get unquoted before interpretation."""
+    args = ["--A='None'", "--B", '"None"']
+    expected = {"A": None, "B": None}
+    actual = common.parse_variable_options(args)
+    assert actual == expected
+
+
+def test_parse_variable_options_input_dir_conversion():
+    """--input-dir argument is converted to --INPUT_PATHS recipe variable."""
+    p = str(Path("foo").absolute())
+    expected = (p, [p])
+
+    # Check --input-dir is converted.
+    input_dir = "foo"
+    unparsed_args = []
+    variables = common.parse_variable_options(
+        arguments=unparsed_args, input_dir=input_dir
+    )
+    assert "INPUT_PATHS" in variables
+    assert variables["INPUT_PATHS"] in expected
+
+    # Check --INPUT_PATHS is directly used.
+    input_dir = None
+    unparsed_args = ["--INPUT_PATHS", p]
+    variables = common.parse_variable_options(
+        arguments=unparsed_args, input_dir=input_dir
+    )
+    assert "INPUT_PATHS" in variables
+    assert variables["INPUT_PATHS"] in expected
+
+
 def test_template_variables():
     """Multiple variables are correctly templated into recipe."""
-    recipe = {"parallel": [{"operator": "misc.noop", "v1": "$VAR_A", "v2": "$VAR_B"}]}
+    recipe = {
+        "steps": [{"operator": "misc.noop", "v1": "$VAR_A", "v2": "$VAR_B", "v3": 0}]
+    }
     variables = {"VAR_A": 42, "VAR_B": 3.14}
-    expected = {"parallel": [{"operator": "misc.noop", "v1": 42, "v2": 3.14}]}
+    expected = {"steps": [{"operator": "misc.noop", "v1": 42, "v2": 3.14, "v3": 0}]}
     actual = common.template_variables(recipe, variables)
     assert actual == expected
     assert recipe == expected
 
 
-def test_replace_template_variable():
+def test_template_variables_wrong_recipe_type():
+    """Give wrong type for recipe."""
+    with pytest.raises(TypeError):
+        common.template_variables(1, {})  # type: ignore
+
+
+def test_replace_template_variable_substitution():
     """Placeholders are correctly substituted."""
-    # Test direct substitution.
-    vars = {"VAR": 1}
+    variables = {"VAR": 1}
     expected = 1
-    actual = common.replace_template_variable("$VAR", vars)
+    actual = common.replace_template_variable("$VAR", variables)
     assert actual == expected
 
-    # Insertion into a larger string.
+
+def test_replace_template_variable_insertion():
+    """Insertion into a larger string."""
+    variables = {"VAR": 1}
     expected = "The number 1"
-    actual = common.replace_template_variable("The number $VAR", vars)
+    actual = common.replace_template_variable("The number $VAR", variables)
     assert actual == expected
 
-    # Error when variable not provided.
+
+def test_replace_template_variable_missing():
+    """Error when variable not provided."""
     with pytest.raises(KeyError):
         common.replace_template_variable("$VAR", {})
 
 
-def test_template_variables_wrong_recipe_type():
-    """Give wrong type for recipe."""
-    with pytest.raises(TypeError):
-        common.template_variables(1, {})
+def test_replace_template_variable_path():
+    """Paths are handled specially."""
+    variables = {"VAR": Path("/dev/null")}
+    expected = "/dev/null"
+    actual = common.replace_template_variable("$VAR", variables)
+    assert actual == expected
+
+
+def test_replace_template_variable_path_list():
+    """Lists of Paths are handled specially."""
+    variables = {"VAR": [Path("/dev/null")]}
+    expected = ["/dev/null"]
+    actual = common.replace_template_variable("$VAR", variables)
+    assert actual == expected
 
 
 def test_get_recipe_meta(tmp_working_dir):
@@ -266,3 +324,46 @@ def test_iter_maybe_string():
     for value in created_iterable:
         # The same object is inside the iterable.
         assert value is atom
+
+
+def test_human_sort():
+    """Strings are sorted by value of contained numbers."""
+    strings = ["a9", "a100", "a20", "a"]
+    assert common.human_sorted(strings) == ["a", "a9", "a20", "a100"]
+    # Check it is also fine with non-string data types.
+    other_types = [[4, 5, 6], [1, 2, 3]]
+    assert common.human_sorted(other_types) == [[1, 2, 3], [4, 5, 6]]
+
+
+def test_combine_dicts():
+    """Test combine_dicts function."""
+    d1 = {"a": 1, "b": 2, "c": {"d": 3, "e": 4}}
+    d2 = {"b": 3, "c": {"d": 5, "f": 6}}
+    expected = {"a": 1, "b": 3, "c": {"d": 5, "e": 4, "f": 6}}
+    assert common.combine_dicts(d1, d2) == expected
+
+
+def test_sort_dicts():
+    """Test recursively sorting a dictionary."""
+    d = {"b": {"ba": 1, "bb": 2}, "a": {"ab": 2, "aa": 1}}
+    assert common.sort_dict(d) == {"a": {"aa": 1, "ab": 2}, "b": {"ba": 1, "bb": 2}}
+
+
+def test_sstrip():
+    """Check strings are unindented and stripped properly."""
+    test_cases = [
+        ("normal", "normal"),
+        (" leading", "leading"),
+        ("trailing ", "trailing"),
+        (" both ", "both"),
+        ("", ""),
+        ("    indented\n    lines", "indented\nlines"),
+        ("not indented\n  indented", "not indented\n  indented"),
+        ("  indented\n    more indented", "indented\n  more indented"),
+        ("\n\n  indented\n\n", "indented"),
+        (" \n    indented\n    indented", "indented\nindented"),
+        ("internal \ntrailing \nspace", "internal \ntrailing \nspace"),
+    ]
+    # Test all those cases.
+    for case, expected in test_cases:
+        assert common.sstrip(case) == expected

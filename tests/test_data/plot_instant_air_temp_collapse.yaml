@@ -2,8 +2,9 @@ title: Plot average air temperature
 description: |
   Plots the mean 1.5m air temperature over an area.
 
-parallel:
+steps:
   - operator: read.read_cubes
+    file_paths: $INPUT_PATHS
     constraint:
       operator: constraints.generate_stash_constraint
       stash: m01s03i236

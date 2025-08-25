@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,9 +24,51 @@ from pathlib import Path
 
 from CSET._common import ArgumentError
 
+logger = logging.getLogger(__name__)
 
-def main():
-    """CLI entrypoint."""
+
+def main(raw_cli_args: list[str] = sys.argv):
+    """CLI entrypoint.
+
+    Handles argument parsing, setting up logging, top level error capturing,
+    and execution of the desired subcommand.
+    """
+    # Read arguments from the command line and CSET_ADDOPTS environment variable
+    # into an args object.
+    parser = setup_argument_parser()
+    cli_args = raw_cli_args[1:] + shlex.split(os.getenv("CSET_ADDOPTS", ""))
+    args, unparsed_args = parser.parse_known_args(cli_args)
+
+    setup_logging(args.verbose)
+
+    # Down here so runs after logging is setup.
+    logger.debug("CLI Arguments: %s", cli_args)
+
+    if args.subparser is None:
+        print("Please choose a command.", file=sys.stderr)
+        parser.print_usage()
+        sys.exit(127)
+
+    try:
+        # Execute the specified subcommand.
+        args.func(args, unparsed_args)
+    except ArgumentError as err:
+        # Error message for when needed template variables are missing.
+        print(err, file=sys.stderr)
+        parser.print_usage()
+        sys.exit(127)
+    except Exception as err:
+        # Provide slightly nicer error messages for unhandled exceptions.
+        print(err, file=sys.stderr)
+        # Display the time and full traceback when debug logging.
+        logger.debug("An unhandled exception occurred.")
+        if logger.isEnabledFor(logging.DEBUG):
+            raise
+        sys.exit(1)
+
+
+def setup_argument_parser() -> argparse.ArgumentParser:
+    """Create argument parser for CSET CLI."""
     parser = argparse.ArgumentParser(
         prog="cset", description="Convective Scale Evaluation Tool"
     )
@@ -49,8 +91,10 @@ def main():
     parser_bake.add_argument(
         "-i",
         "--input-dir",
-        type=Path,
-        help="directory containing input data",
+        type=str,
+        action="extend",
+        nargs="+",
+        help="Alternate way to set the INPUT_PATHS recipe variable",
     )
     parser_bake.add_argument(
         "-o",
@@ -66,12 +110,14 @@ def main():
         required=True,
         help="recipe file to read",
     )
-    bake_step_control = parser_bake.add_mutually_exclusive_group()
-    bake_step_control.add_argument(
-        "--parallel-only", action="store_true", help="only run parallel steps"
+    parser_bake.add_argument(
+        "-s", "--style-file", type=Path, help="colour bar definition to use"
     )
-    bake_step_control.add_argument(
-        "--collate-only", action="store_true", help="only run collation steps"
+    parser_bake.add_argument(
+        "--plot-resolution", type=int, help="plotting resolution in dpi"
+    )
+    parser_bake.add_argument(
+        "--skip-write", action="store_true", help="Skip saving processed output"
     )
     parser_bake.set_defaults(func=_bake_command)
 
@@ -124,82 +170,73 @@ def main():
     )
     parser_cookbook.set_defaults(func=_cookbook_command)
 
-    parser_recipe_id = subparsers.add_parser("recipe-id", help="get the ID of a recipe")
-    parser_recipe_id.add_argument(
-        "-r",
-        "--recipe",
-        type=Path,
-        required=True,
-        help="recipe file to read",
+    parser_extract_workflow = subparsers.add_parser(
+        "extract-workflow", help="extract the CSET cylc workflow"
     )
-    parser_recipe_id.set_defaults(func=_recipe_id_command)
+    parser_extract_workflow.add_argument(
+        "location", type=Path, help="directory to save workflow into"
+    )
+    parser_extract_workflow.set_defaults(func=_extract_workflow_command)
 
-    cli_args = sys.argv[1:] + shlex.split(os.getenv("CSET_ADDOPTS", ""))
-    args, unparsed_args = parser.parse_known_args(cli_args)
-
-    # Setup logging.
-    logging.captureWarnings(True)
-    loglevel = calculate_loglevel(args)
-    logger = logging.getLogger()
-    logger.setLevel(min(loglevel, logging.INFO))
-    stderr_log = logging.StreamHandler()
-    stderr_log.addFilter(lambda record: record.levelno >= loglevel)
-    stderr_log.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    logger.addHandler(stderr_log)
-
-    if args.subparser is None:
-        print("Please choose a command.", file=sys.stderr)
-        parser.print_usage()
-        sys.exit(127)
-
-    try:
-        # Execute the specified subcommand.
-        args.func(args, unparsed_args)
-    except ArgumentError as err:
-        logging.error(err)
-        parser.print_usage()
-        sys.exit(3)
+    return parser
 
 
-def calculate_loglevel(args) -> int:
-    """Calculate the logging level to apply.
+def setup_logging(verbosity: int):
+    """Configure logging level, format and output stream.
 
     Level is based on verbose argument and the LOGLEVEL environment variable.
     """
-    try:
-        name_to_level = logging.getLevelNamesMapping()
-    except AttributeError:
-        # logging.getLevelNamesMapping() is python 3.11 or newer. Using
-        # implementation detail for older versions.
-        name_to_level = logging._nameToLevel
+    logging.captureWarnings(True)
+
+    # Calculate logging level.
     # Level from CLI flags.
-    if args.verbose >= 2:
-        loglevel = logging.DEBUG
-    elif args.verbose == 1:
-        loglevel = logging.INFO
+    if verbosity >= 2:
+        cli_loglevel = logging.DEBUG
+    elif verbosity == 1:
+        cli_loglevel = logging.INFO
     else:
-        loglevel = logging.WARNING
-    return min(
-        loglevel,
-        # Level from environment variable.
-        name_to_level.get(os.getenv("LOGLEVEL"), logging.ERROR),
+        cli_loglevel = logging.WARNING
+
+    # Level from $LOGLEVEL environment variable.
+    env_loglevel = logging.getLevelNamesMapping().get(
+        os.getenv("LOGLEVEL"), logging.ERROR
     )
+
+    # Logging verbosity is the most verbose of CLI and environment setting.
+    loglevel = min(cli_loglevel, env_loglevel)
+
+    # Configure the root logger.
+    logger = logging.getLogger()
+    # Set logging level.
+    logger.setLevel(loglevel)
+
+    # Hide matplotlib's many font messages.
+    class NoFontMessageFilter(logging.Filter):
+        def filter(self, record):
+            return not record.getMessage().startswith("findfont:")
+
+    logging.getLogger("matplotlib.font_manager").addFilter(NoFontMessageFilter())
+
+    stderr_log = logging.StreamHandler()
+    stderr_log.setFormatter(
+        logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+    )
+    logger.addHandler(stderr_log)
 
 
 def _bake_command(args, unparsed_args):
-    from CSET._common import parse_variable_options
-    from CSET.operators import execute_recipe_collate, execute_recipe_parallel
+    from CSET._common import parse_recipe, parse_variable_options
+    from CSET.operators import execute_recipe
 
-    recipe_variables = parse_variable_options(unparsed_args)
-    if not args.collate_only:
-        # Input dir is needed for parallel steps, but not collate steps.
-        if not args.input_dir:
-            raise ArgumentError("the following arguments are required: -i/--input-dir")
-        execute_recipe_parallel(
-            args.recipe, args.input_dir, args.output_dir, recipe_variables
-        )
-    if not args.parallel_only:
-        execute_recipe_collate(args.recipe, args.output_dir, recipe_variables)
+    recipe_variables = parse_variable_options(unparsed_args, args.input_dir)
+    recipe = parse_recipe(args.recipe, recipe_variables)
+    execute_recipe(
+        recipe,
+        args.output_dir,
+        args.style_file,
+        args.plot_resolution,
+        args.skip_write,
+    )
 
 
 def _graph_command(args, unparsed_args):
@@ -223,22 +260,13 @@ def _cookbook_command(args, unparsed_args):
             try:
                 unpack_recipe(args.output_dir, args.recipe)
             except FileNotFoundError:
-                logging.error("Recipe %s does not exist.", args.recipe)
+                logger.error("Recipe %s does not exist.", args.recipe)
                 sys.exit(1)
     else:
         list_available_recipes()
 
 
-def _recipe_id_command(args, unparsed_args):
-    from uuid import uuid4
+def _extract_workflow_command(args, unparsed_args):
+    from CSET.extract_workflow import install_workflow
 
-    from CSET._common import parse_recipe, parse_variable_options, slugify
-
-    recipe_variables = parse_variable_options(unparsed_args)
-    recipe = parse_recipe(args.recipe, recipe_variables)
-    try:
-        recipe_id = slugify(recipe["title"])
-    except KeyError:
-        logging.warning("Recipe has no title; Falling back to random recipe_id.")
-        recipe_id = str(uuid4())
-    print(recipe_id)
+    install_workflow(args.location)

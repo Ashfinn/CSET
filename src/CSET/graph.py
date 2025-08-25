@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Union
 from uuid import uuid4
 
 import pygraphviz
@@ -28,7 +27,7 @@ from CSET._common import parse_recipe
 
 
 def save_graph(
-    recipe_file: Union[Path, str],
+    recipe_file: Path | str,
     save_path: Path = None,
     auto_open: bool = False,
     detailed: bool = False,
@@ -75,7 +74,7 @@ def save_graph(
         graph.add_edge(prev_node, node)
 
         if detailed:
-            graph.get_node(node).attr["label"] = f'{step["operator"]}\n' + "".join(
+            graph.get_node(node).attr["label"] = f"{step['operator']}\n" + "".join(
                 f"<{key}: {kwargs[key]}>\n" for key in kwargs
             )
         return node
@@ -85,8 +84,7 @@ def save_graph(
     prev_node = "START"
     graph.add_node(prev_node)
     try:
-        # TODO: Expand to cover collate too.
-        for step in recipe["parallel"]:
+        for step in recipe["steps"]:
             prev_node = step_parser(step, prev_node)
     except KeyError as err:
         raise ValueError("Invalid recipe") from err

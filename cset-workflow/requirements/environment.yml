@@ -1,7 +1,0 @@
-name: cset-workflow
-channels:
-  - conda-forge
-dependencies:
-  # Runtime dependencies
-  - cset
-  - pip

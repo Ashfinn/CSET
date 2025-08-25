@@ -1,4 +1,4 @@
-# Copyright 2022 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 """Test constraint operators."""
 
 from datetime import datetime
+
+import pytest
 
 from CSET.operators import constraints
 
@@ -33,19 +35,40 @@ def test_generate_var_constraint():
     assert repr(var_constraint) == expected_var_constraint
 
 
-def test_generate_model_level_constraint():
-    """Generate iris cube constraint for model level number."""
-    var_constraint = constraints.generate_model_level_constraint("2")
-    expected_model_level_constraint = (
-        "Constraint(coord_values={'model_level_number': 2})"
-    )
-    assert repr(var_constraint) == expected_model_level_constraint
+def test_generate_var_constraint_stash():
+    """Generate iris cube constraint for UM STASH code with var constraint."""
+    var_constraint = constraints.generate_var_constraint("m01s03i236")
+    expected_stash_constraint = "AttributeConstraint({'STASH': 'm01s03i236'})"
+    assert repr(var_constraint) == expected_stash_constraint
 
 
 def test_generate_cell_methods_constraint():
     """Generate iris cube constraint for cell methods."""
-    cell_methods_constraint = constraints.generate_cell_methods_constraint([])
+    cell_methods_constraint = constraints.generate_cell_methods_constraint(["mean"])
     expected_cell_methods_constraint = "Constraint(cube_func=<function generate_cell_methods_constraint.<locals>.check_cell_methods at"
+    assert expected_cell_methods_constraint in repr(cell_methods_constraint)
+
+
+def test_generate_cell_methods_constraint_sum():
+    """Generate aggregate iris cube constraint for cell methods."""
+    cell_methods_constraint = constraints.generate_cell_methods_constraint(["sum"])
+    expected_cell_methods_constraint = "Constraint(cube_func=<function generate_cell_methods_constraint.<locals>.check_cell_methods at"
+    assert expected_cell_methods_constraint in repr(cell_methods_constraint)
+
+
+def test_generate_cell_methods_constraint_no_aggregation():
+    """Generate iris cube constraint for no aggregation cell methods."""
+    cell_methods_constraint = constraints.generate_cell_methods_constraint([])
+    expected_cell_methods_constraint = "Constraint(cube_func=<function generate_cell_methods_constraint.<locals>.check_no_aggregation at"
+    assert expected_cell_methods_constraint in repr(cell_methods_constraint)
+
+
+def test_generate_cell_methods_constraint_varname():
+    """Generate variable-dependent iris cube constraint for cell methods."""
+    cell_methods_constraint = constraints.generate_cell_methods_constraint(
+        [], "number_of_lightning_flashes"
+    )
+    expected_cell_methods_constraint = "Constraint(cube_func=<function generate_cell_methods_constraint.<locals>.check_cell_sum at"
     assert expected_cell_methods_constraint in repr(cell_methods_constraint)
 
 
@@ -68,31 +91,75 @@ def test_generate_time_constraint():
     assert expected_time_constraint in repr(time_constraint)
 
 
-def test_generate_pressure_level_constraint_single_level():
-    """Generate constraint for a single pressure level."""
-    pressure_constraint = constraints.generate_pressure_level_constraint(
-        pressure_levels=1000
+def test_generate_level_constraint_single_level():
+    """Generate constraint for a single level."""
+    pressure_constraint = constraints.generate_level_constraint(
+        coordinate="pressure", levels=1000
     )
     expected_pressure_constraint = "Constraint(coord_values={'pressure': [1000]})"
     assert expected_pressure_constraint in repr(pressure_constraint)
 
 
-def test_generate_pressure_level_constraint_multi_level():
+def test_generate_level_constraint_multi_level():
     """Generate constraint for multiple pressure levels."""
-    pressure_constraint = constraints.generate_pressure_level_constraint(
-        pressure_levels=[200, 800]
+    pressure_constraint = constraints.generate_level_constraint(
+        coordinate="pressure", levels=[200, 800]
     )
     expected_pressure_constraint = "Constraint(coord_values={'pressure': [200, 800]})"
     assert expected_pressure_constraint in repr(pressure_constraint)
 
 
-def test_generate_pressure_level_constraint_no_pressure():
-    """Generate constraint for not having pressure levels."""
-    pressure_constraint = constraints.generate_pressure_level_constraint(
-        pressure_levels=[]
+def test_generate_level_constraint_all_level():
+    """Generate constraint for all levels."""
+    pressure_constraint = constraints.generate_level_constraint(
+        coordinate="pressure", levels="*"
     )
-    expected_pressure_constraint = "Constraint(cube_func=<function generate_pressure_level_constraint.<locals>.no_pressure_coordinate at"
+    expected_pressure_constraint = "Constraint(coord_values={'pressure': <function generate_level_constraint.<locals>.<lambda> at"
     assert expected_pressure_constraint in repr(pressure_constraint)
+
+
+def test_generate_level_constraint_no_pressure():
+    """Generate constraint for not having pressure levels."""
+    pressure_constraint = constraints.generate_level_constraint(
+        coordinate="pressure", levels=[]
+    )
+    expected_pressure_constraint = (
+        "Constraint(cube_func=<function generate_level_constraint.<locals>.no_levels at"
+    )
+    assert expected_pressure_constraint in repr(pressure_constraint)
+
+
+def test_generate_area_constraint():
+    """Generate area constraint with lat-lon limits."""
+    area_constraint = constraints.generate_area_constraint(0.0, 0.0, 0.1, 0.1)
+    actual = repr(area_constraint)
+    assert "Constraint(coord_values={" in actual
+    assert (
+        "'grid_latitude': <function generate_area_constraint.<locals>.bound_lat at 0x"
+        in actual
+    )
+    assert (
+        "'grid_longitude': <function generate_area_constraint.<locals>.bound_lon at 0x"
+        in actual
+    )
+
+
+def test_generate_area_constraint_no_limits():
+    """Generate area constraint with no limits."""
+    area_constraint = constraints.generate_area_constraint(None, None, None, None)
+    expected_area_constraint = "Constraint()"
+    assert expected_area_constraint in repr(area_constraint)
+
+
+def test_generate_area_constraint_invalid_arguments():
+    """Generate area constraint raises exception with invalid arguments."""
+    # Non-numbers are rejected.
+    with pytest.raises(TypeError):
+        constraints.generate_area_constraint(1, 2, 3, "four")
+
+    # Mixed numbers and Nones are rejected.
+    with pytest.raises(TypeError):
+        constraints.generate_area_constraint(None, None, None, 0)
 
 
 def test_combine_constraints():

@@ -55,10 +55,10 @@ merits.
 Python Support Policy
 ---------------------
 
-CSET follows `NEP 29`_, supporting all python versions released in the prior 42
-months.
+CSET follows `SPEC 0`_, supporting all python versions released in the prior
+three years.
 
-.. _NEP 29: https://numpy.org/neps/nep-0029-deprecation_policy.html
+.. _SPEC 0: https://scientific-python.org/specs/spec-0000/
 
 Making a release
 ----------------
@@ -82,11 +82,36 @@ On this page you will need to add several things.
   notes" button will include the titles of all merged pull requests, which is a
   good starting point, though automated PRs should be removed. It is especially
   important to highlight any changes that might break backwards compatibility.
+  The description should also contain links to download CSET from other places.
 
-Once that is all written you simply need to press "Publish release". A release
-will be automatically made, and the package will be pushed to PyPI and beyond.
+Then save this as a draft.
+
+Before publishing the release you will want to add the release notes into a new
+section in the :doc:`/changelog`. If this is someone's first time contributing
+also link their GitHub username to their profile by adding the following line at
+the bottom of that section:
+
+.. code-block:: rst
+
+    .. _@username: https://github.com/username
+
+Once that is all written and committed to the main branch, you simply need to
+press "Publish release". This triggers a release GitHub Action which will
+automatically make a release and push the package to PyPI.
+
+Finally we need to update the `conda-forge cset feedstock`_ to publish an
+updated conda package. The main change that will need to be made is updating the
+version and SHA256 hash in the ``recipe/recipe.yaml`` file. The hash can be
+obtained from the `PyPI release page`_ > "Download files" > "View details" on
+the source distribution.
+
+Once the change is committed it can take up to an hour for the updated package
+to become visible via the conda-forge CDN, but no further action is required.
 
 .. _CalVer: https://calver.org/
 .. _Releases: https://github.com/MetOffice/CSET/releases
 .. _Draft a new release: https://github.com/MetOffice/CSET/releases/new
 .. _setuptools_scm: https://setuptools-scm.readthedocs.io/en/latest/
+.. _conda-forge cset feedstock: https://github.com/conda-forge/cset-feedstock
+.. _PyPI release page: https://pypi.org/project/CSET/
+.. _update conda lock files GitHub Action: https://github.com/MetOffice/CSET/actions/workflows/conda-lock.yml

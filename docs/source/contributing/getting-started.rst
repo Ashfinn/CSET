@@ -6,7 +6,7 @@ Contributing
 
 Contributions are readily welcome! In addition to reading the `working
 practices`_, the key recommendation is early communication. Open an issue on
-Github with your proposed change or addition in the design phase, and then
+GitHub with your proposed change or addition in the design phase, and then
 others can provide guidance early. To create an issue:
 
 - Go to the `issue tracker on GitHub`_,
@@ -25,6 +25,8 @@ PR title.
 
 Before you get to coding, there are a few steps you need to do to setup the
 development environment.
+
+.. _getting-the-code:
 
 Getting the code
 ----------------
@@ -59,26 +61,34 @@ before we can develop.
 Setting up tooling
 ------------------
 
-To be able to run the tests or build the documentation you need some
-prerequisite software. The easiest way to get this is with `conda`_. The
-following commands, when run from within the CSET directory, will setup a conda
-environment for you to use.
+To develop CSET you need some prerequisite software. If you have `GNU make`_ and
+`conda`_ installed you can use a single command to setup the development
+environment.
+
+.. code-block:: bash
+
+    make setup
+
+To use the software environment run ``conda activate cset-dev``. You will have
+to rerun this command for every new terminal.
+
+If you don't have make, you can use the following equivalent commands which,
+when run from within the CSET directory, will setup a conda environment for you
+to use.
 
 .. code-block:: bash
 
     # Creates a conda environment named "cset-dev".
-    conda create -n cset-dev --file requirements/locks/py312-lock-linux-64.txt
+    conda create -n cset-dev --file requirements/locks/py313-lock-linux-64.txt
     # Activates the conda environment.
     conda activate cset-dev
     # Adds extra checks when you commit something with git.
     pre-commit install
     # Make CSET runnable for manual testing
-    pip install -e .
-
-When subsequently returning to the code after closing your terminal, you will
-need to rerun the ``conda activate cset-dev`` command.
+    pip install --no-deps -e .
 
 .. _conda: https://docs.conda.io/en/latest/
+.. _GNU make: https://www.gnu.org/software/make/
 
 Updating tooling
 ------------------

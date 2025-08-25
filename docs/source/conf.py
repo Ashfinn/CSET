@@ -8,7 +8,7 @@ https://www.sphinx-doc.org/en/master/usage/configuration.html
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "CSET"
-copyright = "2022-2023, Met Office and contributors."
+copyright = "Crown copyright, Met Office (2022-2025) and CSET contributors."
 author = "Met Office and Partners"
 
 # -- General configuration ---------------------------------------------------
@@ -26,6 +26,7 @@ extensions = [
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "furo"
+html_baseurl = "https://metoffice.github.io/CSET/"
 
 # -- LaTeX output configuration ----------------------------------------------
 # https://www.sphinx-doc.org/en/master/latex.html
@@ -42,7 +43,17 @@ extlinks = {
     "pr": ("https://github.com/MetOffice/CSET/pull/%s", "PR #%s"),
 }
 
-# Ignore GitHub links as we have many and don't want to be rate limited.
+# -- Linkcheck configuration -------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-the-linkcheck-builder
+
+linkcheck_anchors = False
 linkcheck_ignore = [
+    # Ignore GitHub links as we have many and don't want to be rate limited.
     r"https://github.com/.+/(issues|pull)/\d+",
+    # GNU.org has an aggressive rate limit.
+    r"https://www.gnu.org/software/make/",
+    # CSET-workflow is a private repository.
+    r"https://github.com/MetOffice/CSET-workflow",
+    # StackOverflow blocks requests.
+    r"https://stackoverflow.com/.+",
 ]

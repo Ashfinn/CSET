@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,32 +18,56 @@ import inspect
 import json
 import logging
 import os
-import warnings
+import zipfile
 from pathlib import Path
-from typing import Union
 
 from iris import FUTURE
 
 # Import operators here so they are exported for use by recipes.
 import CSET.operators
-from CSET._common import parse_recipe
 from CSET.operators import (
+    ageofair,
     aggregate,
     collapse,
     constraints,
     convection,
+    ensembles,
     filters,
+    mesoscale,
     misc,
     plot,
     read,
     regrid,
+    transect,
     write,
 )
+
+# Exported operators & functions to use elsewhere.
+__all__ = [
+    "ageofair",
+    "aggregate",
+    "collapse",
+    "constraints",
+    "convection",
+    "ensembles",
+    "execute_recipe",
+    "filters",
+    "get_operator",
+    "mesoscale",
+    "misc",
+    "plot",
+    "read",
+    "regrid",
+    "transect",
+    "write",
+]
 
 # Stop iris giving a warning whenever it loads something.
 FUTURE.datum_support = True
 # Stop iris giving a warning whenever it saves something.
 FUTURE.save_split_attrs = True
+# Accept microsecond precision in iris times.
+FUTURE.date_microseconds = True
 
 
 def get_operator(name: str):
@@ -85,18 +109,16 @@ def get_operator(name: str):
 
 def _write_metadata(recipe: dict):
     """Write a meta.json file in the CWD."""
-    # TODO: Investigate whether we might be better served by an SQLite database.
     metadata = recipe.copy()
     # Remove steps, as not needed, and might contain non-serialisable types.
-    metadata.pop("parallel", None)
     metadata.pop("steps", None)
-    metadata.pop("collate", None)
-    metadata.pop("post-steps", None)
+    # To remove long variable names with suffix
+    if "title" in metadata:
+        metadata["title"] = metadata["title"].replace("_for_climate_averaging", "")
+        metadata["title"] = metadata["title"].replace("_radiative_timestep", "")
+        metadata["title"] = metadata["title"].replace("_maximum_random_overlap", "")
     with open("meta.json", "wt", encoding="UTF-8") as fp:
-        json.dump(metadata, fp)
-    os.sync()
-    # Stat directory to force NFS to synchronise metadata.
-    os.stat(Path.cwd())
+        json.dump(metadata, fp, indent=2)
 
 
 def _step_parser(step: dict, step_input: any) -> str:
@@ -119,56 +141,47 @@ def _step_parser(step: dict, step_input: any) -> str:
     first_arg = next(iter(inspect.signature(operator).parameters.keys()))
     logging.debug("first_arg: %s", first_arg)
     if first_arg not in kwargs:
+        logging.debug("first_arg not in kwargs, using step_input.")
         return operator(step_input, **kwargs)
     else:
+        logging.debug("first_arg in kwargs.")
         return operator(**kwargs)
 
 
-def _run_steps(recipe, steps, step_input, output_directory: Path):
-    """Execute the steps in a recipe."""
-    original_working_directory = Path.cwd()
-    os.chdir(output_directory)
-    try:
-        logger = logging.getLogger()
-        diagnostic_log = logging.FileHandler(
-            filename="CSET.log", mode="w", encoding="UTF-8"
-        )
-        diagnostic_log.addFilter(lambda record: record.levelno >= logging.INFO)
-        diagnostic_log.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        )
-        logger.addHandler(diagnostic_log)
-        # Create metadata file used by some steps.
-        _write_metadata(recipe)
-        # Execute the recipe.
-        for step in steps:
-            step_input = _step_parser(step, step_input)
-        logging.info("Recipe output:\n%s", step_input)
-    finally:
-        os.chdir(original_working_directory)
+def create_diagnostic_archive():
+    """Create archive for easy download of plots and data."""
+    output_directory: Path = Path.cwd()
+    archive_path = output_directory / "diagnostic.zip"
+    with zipfile.ZipFile(
+        archive_path, "w", compression=zipfile.ZIP_DEFLATED
+    ) as archive:
+        for file in output_directory.rglob("*"):
+            # Check the archive doesn't add itself.
+            if not file.samefile(archive_path):
+                archive.write(file, arcname=file.relative_to(output_directory))
 
 
-def execute_recipe_parallel(
-    recipe_yaml: Union[Path, str],
-    input_directory: Path,
+def execute_recipe(
+    recipe: dict,
     output_directory: Path,
-    recipe_variables: dict = None,
+    style_file: Path = None,
+    plot_resolution: int = None,
+    skip_write: bool = None,
 ) -> None:
-    """Parse and executes the parallel steps from a recipe file.
+    """Parse and executes the steps from a recipe file.
 
     Parameters
     ----------
-    recipe_yaml: Path or str
-        Path to a file containing, or string of, a recipe's YAML describing the
-        operators that need running. If a Path is provided it is opened and
-        read.
-    input_file: Path
-        Pathlike to netCDF (or something else that iris read) file to be used as
-        input.
+    recipe: dict
+        Parsed recipe.
     output_directory: Path
         Pathlike indicating desired location of output.
-    recipe_variables: dict
-        Dictionary of variables for the recipe.
+    style_file: Path, optional
+        Path to a style file.
+    plot_resolution: int, optional
+        Resolution of plots in dpi.
+    skip_write: bool, optional
+        Skip saving processed output alongside plots.
 
     Raises
     ------
@@ -181,84 +194,42 @@ def execute_recipe_parallel(
     TypeError
         The provided recipe is not a stream or Path.
     """
-    if recipe_variables is None:
-        recipe_variables = {}
-    recipe = parse_recipe(recipe_yaml, recipe_variables)
-    step_input = Path(input_directory).absolute()
-    # Create output directory, and an inter-cycle intermediate directory.
+    # Create output directory.
     try:
-        (output_directory / "intermediate").mkdir(parents=True, exist_ok=True)
+        output_directory.mkdir(parents=True, exist_ok=True)
     except (FileExistsError, NotADirectoryError) as err:
         logging.error("Output directory is a file. %s", output_directory)
         raise err
-    # If parallel doesn't exist try steps.
+    steps = recipe["steps"]
+
+    # Execute the steps in a recipe.
+    original_working_directory = Path.cwd()
     try:
-        steps = recipe["parallel"]
-    except KeyError:
-        if "steps" in recipe:
-            warnings.warn(
-                "'steps' recipe key is deprecated. Use 'parallel' instead.",
-                DeprecationWarning,
-                stacklevel=1,
-            )
-        steps = recipe["steps"]
-    _run_steps(recipe, steps, step_input, output_directory)
+        os.chdir(output_directory)
+        logger = logging.getLogger(__name__)
+        diagnostic_log = logging.FileHandler(
+            filename="CSET.log", mode="w", encoding="UTF-8"
+        )
+        diagnostic_log.setFormatter(
+            logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+        )
+        logger.addHandler(diagnostic_log)
+        # Create metadata file used by some steps.
+        if style_file:
+            recipe["style_file_path"] = str(style_file)
+        if plot_resolution:
+            recipe["plot_resolution"] = plot_resolution
+        if skip_write:
+            recipe["skip_write"] = skip_write
+        _write_metadata(recipe)
 
+        # Execute the recipe.
+        step_input = None
+        for step in steps:
+            step_input = _step_parser(step, step_input)
+        logger.info("Recipe output:\n%s", step_input)
 
-def execute_recipe_collate(
-    recipe_yaml: Union[Path, str], output_directory: Path, recipe_variables: dict = None
-) -> None:
-    """Parse and execute the collation steps from a recipe file.
-
-    Parameters
-    ----------
-    recipe_yaml: Path or str
-        Path to a file containing, or string of, a recipe's YAML describing the
-        operators that need running. If a Path is provided it is opened and
-        read.
-    output_directory: Path
-        Pathlike indicating desired location of output. Must already exist.
-    recipe_variables: dict
-        Dictionary of variables for the recipe.
-
-    Raises
-    ------
-    ValueError
-        The recipe is not well formed.
-    TypeError
-        The provided recipe is not a stream or Path.
-    """
-    if recipe_variables is None:
-        recipe_variables = {}
-    output_directory = Path(output_directory).resolve()
-    assert output_directory.is_dir()
-    recipe = parse_recipe(recipe_yaml, recipe_variables)
-    # If collate doesn't exist try post-steps, else treat it as having no steps.
-    try:
-        steps = recipe["collate"]
-    except KeyError:
-        if "post-steps" in recipe:
-            warnings.warn(
-                "'post-steps' recipe key is deprecated. Use 'collate' instead.",
-                DeprecationWarning,
-                stacklevel=1,
-            )
-        steps = recipe.get("post-steps", tuple())
-    _run_steps(recipe, steps, output_directory, output_directory)
-
-
-__all__ = [
-    "aggregate",
-    "collapse",
-    "constraints",
-    "convection",
-    "execute_recipe_parallel",
-    "execute_recipe_collate",
-    "filters",
-    "get_operator",
-    "misc",
-    "plot",
-    "read",
-    "regrid",
-    "write",
-]
+        logger.info("Creating diagnostic archive.")
+        create_diagnostic_archive()
+    finally:
+        os.chdir(original_working_directory)

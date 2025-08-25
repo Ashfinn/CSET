@@ -1,4 +1,4 @@
-# Copyright 2022 Met Office and contributors.
+# © Crown copyright, Met Office (2022-2024) and CSET contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 import secrets
 from pathlib import Path
-from typing import Union
 
 import iris
 import iris.cube
@@ -25,7 +24,7 @@ from CSET._common import get_recipe_metadata, slugify
 
 
 def write_cube_to_nc(
-    cube: Union[iris.cube.Cube, iris.cube.CubeList],
+    cube: iris.cube.Cube | iris.cube.CubeList,
     filename: str = None,
     overwrite: bool = False,
     **kwargs,
@@ -49,6 +48,11 @@ def write_cube_to_nc(
     Cube | CubeList
         The inputted cube(list) (so further operations can be applied)
     """
+    # Allow writing to be disabled without changing the recipe. This improves
+    # runtime and avoids using excessive disk space for large runs.
+    if get_recipe_metadata().get("skip_write"):
+        return cube
+
     if filename is None:
         filename = slugify(get_recipe_metadata().get("title", "Untitled"))
 
